@@ -1,0 +1,34 @@
+services:
+  polymarket-bot:
+    build: .
+    container_name: polymarket-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - ./.keystore:/app/.keystore:ro
+      - ./.keystore.enc:/app/.keystore.enc:ro
+    command: ["--strategies", "arbitrage", "bonding"]
+
+  polymarket-bot-dry-run:
+    build: .
+    container_name: polymarket-bot-dry-run
+    profiles:
+      - dry-run
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    command: ["--dry-run", "--strategies", "arbitrage", "bonding", "momentum"]
+
+  polymarket-monitor:
+    build: .
+    container_name: polymarket-monitor
+    profiles:
+      - monitor
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    command: ["--monitor"]

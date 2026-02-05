@@ -1,8 +1,17 @@
 import sys
+import logging
 import structlog
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
+
+LOG_LEVELS = {
+    "DEBUG": logging.DEBUG,
+    "INFO": logging.INFO,
+    "WARNING": logging.WARNING,
+    "ERROR": logging.ERROR,
+    "CRITICAL": logging.CRITICAL,
+}
 
 def setup_logging(
     level: str = "INFO",
@@ -22,11 +31,11 @@ def setup_logging(
     else:
         processors.append(structlog.dev.ConsoleRenderer(colors=True))
     
+    log_level = LOG_LEVELS.get(level.upper(), logging.INFO)
+    
     structlog.configure(
         processors=processors,
-        wrapper_class=structlog.make_filtering_bound_logger(
-            getattr(structlog, level.upper(), structlog.INFO)
-        ),
+        wrapper_class=structlog.make_filtering_bound_logger(log_level),
         context_class=dict,
         logger_factory=structlog.PrintLoggerFactory(),
         cache_logger_on_first_use=True,

@@ -44,12 +44,43 @@ Professional prediction market trading tool for [Polymarket](https://polymarket.
 
 ## Installation
 
+### Local Installation
+
 ```bash
-git clone https://github.com/your-repo/polymarket-bot.git
+git clone https://github.com/tugcantopaloglu/polymarket-bot.git
 cd polymarket-bot
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+```
+
+### Docker Installation
+
+```bash
+# Build the image
+docker build -t polymarket-bot .
+
+# Run with docker-compose (recommended)
+docker compose up -d polymarket-bot
+
+# Or run directly
+docker run -d --name polymarket-bot \
+  --env-file .env \
+  -v ./data:/app/data \
+  polymarket-bot --strategies arbitrage bonding
+```
+
+#### Docker Compose Profiles
+
+```bash
+# Live trading (default)
+docker compose up -d polymarket-bot
+
+# Dry run mode (testing)
+docker compose --profile dry-run up -d polymarket-bot-dry-run
+
+# Monitor only (no trading)
+docker compose --profile monitor up -d polymarket-monitor
 ```
 
 ## Configuration

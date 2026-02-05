@@ -1,0 +1,16 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.log
+*.db
+*.json
+.git/
+.env
+.keystore
+.keystore.enc
+legacy/
+tests/
+*.md
+.gitignore
+data/

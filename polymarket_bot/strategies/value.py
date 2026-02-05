@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from .base import Strategy, StrategyResult, StrategyType
 from ..client import PolymarketClient, MarketInfo, OrderBook
 from ..portfolio import PortfolioManager
-from ..analysis.market_analyzer import market_analyzer
+from ..analysis.market_analyzer import market_analyzer, MarketMetrics, RiskMetrics
 from ..config import config
 from ..utils.logging import get_logger
 
@@ -174,5 +174,3 @@ class ValueStrategy(Strategy):
         )
         
         return max(0.0, min(1.0, confidence))
-
-from ..analysis.market_analyzer import MarketMetrics, RiskMetrics
