@@ -1,12 +1,14 @@
-import pytest
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 
-from polymarket_bot.strategies.base import Strategy, StrategyResult, StrategyType
+import pytest
+
+from polymarket_bot.client import MarketInfo, OrderBook, TokenInfo
 from polymarket_bot.strategies.arbitrage import ArbitrageStrategy
+from polymarket_bot.strategies.base import StrategyResult, StrategyType
 from polymarket_bot.strategies.bonding import BondingStrategy
 from polymarket_bot.strategies.momentum import MomentumStrategy
-from polymarket_bot.client import MarketInfo, TokenInfo, OrderBook
+
 
 @pytest.fixture
 def mock_client():
@@ -54,7 +56,7 @@ def sample_market_for_bonding():
         ),
         volume_24h=7000,
         liquidity=3000,
-        end_date=datetime.now(timezone.utc) + timedelta(days=2),
+        end_date=datetime.now(UTC) + timedelta(days=2),
         category="Events"
     )
 
@@ -79,7 +81,7 @@ def sample_market_for_arbitrage():
         ),
         volume_24h=18000,
         liquidity=5000,
-        end_date=datetime.now(timezone.utc) + timedelta(days=7),
+        end_date=datetime.now(UTC) + timedelta(days=7),
         category="Sports"
     )
 
@@ -87,7 +89,7 @@ class TestArbitrageStrategy:
     @pytest.mark.asyncio
     async def test_evaluate_no_arbitrage(self, mock_client, mock_portfolio, sample_market_for_arbitrage):
         strategy = ArbitrageStrategy(mock_client, mock_portfolio)
-        
+
         mock_client.get_order_book = AsyncMock(side_effect=[
             OrderBook(
                 bids=[], asks=[],
@@ -102,10 +104,10 @@ class TestArbitrageStrategy:
                 mid_price=0.50, spread=0.02
             )
         ])
-        
+
         result = await strategy.evaluate(sample_market_for_arbitrage)
         assert result is None or not result.is_actionable
-    
+
     def test_strategy_type(self, mock_client, mock_portfolio):
         strategy = ArbitrageStrategy(mock_client, mock_portfolio)
         assert strategy.strategy_type == StrategyType.ARBITRAGE
@@ -115,11 +117,11 @@ class TestBondingStrategy:
     async def test_evaluate_high_probability(self, mock_client, mock_portfolio, sample_market_for_bonding):
         strategy = BondingStrategy(mock_client, mock_portfolio, min_probability=0.92)
         result = await strategy.evaluate(sample_market_for_bonding)
-        
+
         assert result is not None
         assert result.side == "YES"
         assert result.confidence > 0.5
-    
+
     @pytest.mark.asyncio
     async def test_evaluate_no_end_date(self, mock_client, mock_portfolio):
         market = MarketInfo(
@@ -132,12 +134,12 @@ class TestBondingStrategy:
             end_date=None,
             category="Other"
         )
-        
+
         strategy = BondingStrategy(mock_client, mock_portfolio)
         result = await strategy.evaluate(market)
-        
+
         assert result is None
-    
+
     @pytest.mark.asyncio
     async def test_evaluate_too_far_resolution(self, mock_client, mock_portfolio):
         market = MarketInfo(
@@ -147,15 +149,15 @@ class TestBondingStrategy:
             no_token=TokenInfo("no", "No", 0.05, 1000, 0),
             volume_24h=2000,
             liquidity=1000,
-            end_date=datetime.now(timezone.utc) + timedelta(days=30),
+            end_date=datetime.now(UTC) + timedelta(days=30),
             category="Other"
         )
-        
+
         strategy = BondingStrategy(mock_client, mock_portfolio, max_days_to_resolution=14)
         result = await strategy.evaluate(market)
-        
+
         assert result is None
-    
+
     def test_strategy_type(self, mock_client, mock_portfolio):
         strategy = BondingStrategy(mock_client, mock_portfolio)
         assert strategy.strategy_type == StrategyType.BONDING
@@ -170,15 +172,15 @@ class TestMomentumStrategy:
             no_token=TokenInfo("no", "No", 0.50, 100, -0.1),
             volume_24h=500,
             liquidity=200,
-            end_date=datetime.now(timezone.utc) + timedelta(days=7),
+            end_date=datetime.now(UTC) + timedelta(days=7),
             category="Other"
         )
-        
+
         strategy = MomentumStrategy(mock_client, mock_portfolio, min_volume=1000)
         result = await strategy.evaluate(market)
-        
+
         assert result is None
-    
+
     def test_strategy_type(self, mock_client, mock_portfolio):
         strategy = MomentumStrategy(mock_client, mock_portfolio)
         assert strategy.strategy_type == StrategyType.MOMENTUM
@@ -197,7 +199,7 @@ class TestStrategyResult:
             reason="test"
         )
         assert result.is_actionable
-    
+
     def test_is_not_actionable_low_confidence(self):
         result = StrategyResult(
             strategy=StrategyType.ARBITRAGE,
@@ -211,7 +213,7 @@ class TestStrategyResult:
             reason="test"
         )
         assert not result.is_actionable
-    
+
     def test_is_not_actionable_hold(self):
         result = StrategyResult(
             strategy=StrategyType.ARBITRAGE,

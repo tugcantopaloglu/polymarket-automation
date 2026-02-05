@@ -1,9 +1,11 @@
 import asyncio
 import time
-from dataclasses import dataclass, field
 from collections import deque
-from typing import Callable, TypeVar, ParamSpec
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from functools import wraps
+from typing import ParamSpec, TypeVar
+
 import structlog
 
 log = structlog.get_logger()
@@ -17,23 +19,23 @@ class RateLimiter:
     burst_limit: int = 20
     _timestamps: deque = field(default_factory=deque)
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
-    
+
     async def acquire(self):
         async with self._lock:
             now = time.monotonic()
             window_start = now - 1.0
-            
+
             while self._timestamps and self._timestamps[0] < window_start:
                 self._timestamps.popleft()
-            
+
             if len(self._timestamps) >= self.requests_per_second:
                 sleep_time = self._timestamps[0] - window_start
                 if sleep_time > 0:
                     log.debug("rate_limit_wait", sleep=f"{sleep_time:.3f}s")
                     await asyncio.sleep(sleep_time)
-                    
+
             self._timestamps.append(now)
-    
+
     def remaining(self) -> int:
         now = time.monotonic()
         window_start = now - 1.0
@@ -47,7 +49,7 @@ class RetryConfig:
     base_delay: float = 1.0
     max_delay: float = 60.0
     exponential_base: float = 2.0
-    
+
 class RetryableError(Exception):
     pass
 
@@ -59,7 +61,7 @@ async def retry_with_backoff(
 ) -> T:
     config = config or RetryConfig()
     last_exception = None
-    
+
     for attempt in range(config.max_attempts):
         try:
             return await func(*args, **kwargs)
@@ -78,9 +80,9 @@ async def retry_with_backoff(
                     error=str(e)
                 )
                 await asyncio.sleep(delay)
-        except Exception as e:
+        except Exception:
             raise
-    
+
     raise last_exception
 
 def rate_limited(limiter: RateLimiter):
@@ -107,11 +109,11 @@ class CircuitBreaker:
         self._state = "closed"
         self._half_open_successes = 0
         self._lock = asyncio.Lock()
-    
+
     @property
     def state(self) -> str:
         return self._state
-    
+
     async def call(self, func: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
         async with self._lock:
             if self._state == "open":
@@ -121,7 +123,7 @@ class CircuitBreaker:
                     self._half_open_successes = 0
                 else:
                     raise CircuitBreakerOpenError("Circuit breaker is open")
-        
+
         try:
             result = await func(*args, **kwargs)
             async with self._lock:
@@ -134,7 +136,7 @@ class CircuitBreaker:
                 elif self._state == "closed":
                     self._failures = 0
             return result
-        except Exception as e:
+        except Exception:
             async with self._lock:
                 self._failures += 1
                 self._last_failure_time = time.monotonic()

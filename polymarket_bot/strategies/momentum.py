@@ -1,12 +1,11 @@
-from typing import Optional, List, AsyncGenerator
-from datetime import datetime, timezone
+from collections.abc import AsyncGenerator
+from datetime import UTC, datetime
 
-from .base import Strategy, StrategyResult, StrategyType
-from ..client import PolymarketClient, MarketInfo, OrderBook
+from ..analysis.market_analyzer import MarketMetrics, market_analyzer
+from ..client import MarketInfo, OrderBook, PolymarketClient
 from ..portfolio import PortfolioManager
-from ..analysis.market_analyzer import market_analyzer, MarketMetrics
-from ..config import config
 from ..utils.logging import get_logger
+from .base import Strategy, StrategyResult, StrategyType
 
 log = get_logger(__name__)
 
@@ -23,39 +22,39 @@ class MomentumStrategy(Strategy):
         self.momentum_threshold = momentum_threshold
         self.min_volume = min_volume
         self.lookback_hours = lookback_hours
-    
+
     @property
     def strategy_type(self) -> StrategyType:
         return StrategyType.MOMENTUM
-    
-    async def scan(self, markets: List[MarketInfo]) -> AsyncGenerator[StrategyResult, None]:
-        self._last_scan = datetime.now(timezone.utc)
-        
+
+    async def scan(self, markets: list[MarketInfo]) -> AsyncGenerator[StrategyResult, None]:
+        self._last_scan = datetime.now(UTC)
+
         for market in markets:
             if market.volume_24h < self.min_volume:
                 continue
-            
+
             if market.yes_token.price <= 0.1 or market.yes_token.price >= 0.9:
                 continue
-            
+
             result = await self.evaluate(market)
-            
+
             if result and result.is_actionable:
                 self._opportunities_found += 1
                 yield result
-    
-    async def evaluate(self, market: MarketInfo, book: OrderBook = None) -> Optional[StrategyResult]:
+
+    async def evaluate(self, market: MarketInfo, book: OrderBook = None) -> StrategyResult | None:
         if not book:
             book = await self.client.get_order_book(market.yes_token.token_id)
-        
+
         metrics = market_analyzer.analyze_market(market, book)
-        
+
         if abs(metrics.momentum_24h) < self.momentum_threshold:
             return None
-        
+
         if metrics.trend_strength < 0.3:
             return None
-        
+
         if metrics.momentum_24h > 0:
             side = "YES"
             price = market.yes_token.price
@@ -64,20 +63,20 @@ class MomentumStrategy(Strategy):
             side = "NO"
             price = market.no_token.price
             momentum = -metrics.momentum_24h
-        
+
         confidence = self._calculate_confidence(metrics, momentum)
-        
+
         if confidence < 0.5:
             return None
-        
+
         risk_metrics = market_analyzer.calculate_risk_metrics(market, metrics, side)
         position_size = self.portfolio.calculate_position_size(
             risk_metrics,
             self.portfolio.client.get_balance()
         )
-        
+
         expected_profit = position_size * momentum * 0.5
-        
+
         return StrategyResult(
             strategy=self.strategy_type,
             market=market,
@@ -97,24 +96,24 @@ class MomentumStrategy(Strategy):
                 "bid_ask_ratio": metrics.bid_ask_ratio
             }
         )
-    
+
     def _calculate_confidence(self, metrics: MarketMetrics, momentum: float) -> float:
         momentum_score = min(1.0, momentum / 0.15)
-        
+
         trend_score = metrics.trend_strength
-        
+
         volume_score = min(1.0, metrics.volume_trend / 2.0)
-        
+
         volatility_penalty = min(0.3, metrics.volatility_24h * 2)
-        
+
         liquidity_score = metrics.liquidity_score
-        
+
         bid_ask_score = 0.5
         if metrics.bid_ask_ratio > 1.2:
             bid_ask_score = 0.7 if momentum > 0 else 0.3
         elif metrics.bid_ask_ratio < 0.8:
             bid_ask_score = 0.3 if momentum > 0 else 0.7
-        
+
         confidence = (
             momentum_score * 0.25 +
             trend_score * 0.25 +
@@ -123,7 +122,7 @@ class MomentumStrategy(Strategy):
             bid_ask_score * 0.2 -
             volatility_penalty
         )
-        
+
         return max(0.0, min(1.0, confidence))
 
 class MeanReversionStrategy(Strategy):
@@ -137,53 +136,53 @@ class MeanReversionStrategy(Strategy):
         super().__init__(client, portfolio, "MeanReversion")
         self.reversion_threshold = reversion_threshold
         self.min_liquidity = min_liquidity
-    
+
     @property
     def strategy_type(self) -> StrategyType:
         return StrategyType.MEAN_REVERSION
-    
-    async def scan(self, markets: List[MarketInfo]) -> AsyncGenerator[StrategyResult, None]:
-        self._last_scan = datetime.now(timezone.utc)
-        
+
+    async def scan(self, markets: list[MarketInfo]) -> AsyncGenerator[StrategyResult, None]:
+        self._last_scan = datetime.now(UTC)
+
         for market in markets:
             if market.liquidity < self.min_liquidity:
                 continue
-            
+
             if market.yes_token.price <= 0.15 or market.yes_token.price >= 0.85:
                 continue
-            
+
             result = await self.evaluate(market)
-            
+
             if result and result.is_actionable:
                 self._opportunities_found += 1
                 yield result
-    
-    async def evaluate(self, market: MarketInfo, book: OrderBook = None) -> Optional[StrategyResult]:
+
+    async def evaluate(self, market: MarketInfo, book: OrderBook = None) -> StrategyResult | None:
         if not book:
             book = await self.client.get_order_book(market.yes_token.token_id)
-        
+
         metrics = market_analyzer.analyze_market(market, book)
-        
+
         if abs(metrics.mean_reversion_signal) < self.reversion_threshold:
             return None
-        
+
         if metrics.volatility_24h < 0.02:
             return None
-        
+
         if metrics.mean_reversion_signal > 0:
             side = "YES"
             price = market.yes_token.price
         else:
             side = "NO"
             price = market.no_token.price
-        
+
         signal_strength = abs(metrics.mean_reversion_signal)
-        
+
         volatility_factor = min(1.0, metrics.volatility_24h / 0.1)
         liquidity_factor = metrics.liquidity_score
-        
+
         trend_penalty = 0.2 if abs(metrics.momentum_24h) > 0.1 else 0
-        
+
         confidence = (
             signal_strength * 0.4 +
             volatility_factor * 0.2 +
@@ -191,19 +190,19 @@ class MeanReversionStrategy(Strategy):
             0.2 -
             trend_penalty
         )
-        
+
         if confidence < 0.5:
             return None
-        
+
         risk_metrics = market_analyzer.calculate_risk_metrics(market, metrics, side)
         position_size = self.portfolio.calculate_position_size(
             risk_metrics,
             self.portfolio.client.get_balance()
         )
-        
+
         expected_reversion = signal_strength * metrics.volatility_24h * 2
         expected_profit = position_size * expected_reversion
-        
+
         return StrategyResult(
             strategy=self.strategy_type,
             market=market,

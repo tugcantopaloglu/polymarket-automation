@@ -1,14 +1,11 @@
-import asyncio
+from dataclasses import dataclass
+
 import aiohttp
 import structlog
-from decimal import Decimal
-from dataclasses import dataclass
-from typing import Optional
-from py_clob_client.client import ClobClient
-from py_clob_client.clob_types import OrderArgs, MarketOrderArgs, OrderType, BookParams
-from py_clob_client.order_builder.constants import BUY, SELL
-
 from config import config, keystore
+from py_clob_client.client import ClobClient
+from py_clob_client.clob_types import MarketOrderArgs, OrderArgs, OrderType
+from py_clob_client.order_builder.constants import BUY, SELL
 
 log = structlog.get_logger()
 
@@ -17,18 +14,18 @@ class TokenInfo:
     token_id: str
     outcome: str
     price: float
-    
+
 @dataclass
 class MarketInfo:
     condition_id: str
     question: str
     yes_token: TokenInfo
     no_token: TokenInfo
-    
+
     @property
     def spread(self) -> float:
         return 1.0 - (self.yes_token.price + self.no_token.price)
-    
+
     @property
     def is_arbitrage(self) -> bool:
         return self.spread > config.trading.min_profit_margin
@@ -43,20 +40,20 @@ class OrderBook:
     ask_liquidity: float
 
 class PolymarketClient:
-    def __init__(self, private_key: Optional[str] = None, funder: Optional[str] = None):
+    def __init__(self, private_key: str | None = None, funder: str | None = None):
         self.private_key = private_key or keystore.load_private_key()
         self.funder = funder
-        self._clob: Optional[ClobClient] = None
-        self._session: Optional[aiohttp.ClientSession] = None
-        
+        self._clob: ClobClient | None = None
+        self._session: aiohttp.ClientSession | None = None
+
     async def __aenter__(self):
         self._session = aiohttp.ClientSession()
         return self
-    
+
     async def __aexit__(self, *args):
         if self._session:
             await self._session.close()
-            
+
     @property
     def clob(self) -> ClobClient:
         if self._clob is None:
@@ -72,7 +69,7 @@ class PolymarketClient:
             else:
                 self._clob = ClobClient(config.host)
         return self._clob
-    
+
     async def get_markets(self, active: bool = True, limit: int = 100) -> list[dict]:
         params = {"active": str(active).lower(), "limit": limit}
         async with self._session.get(
@@ -81,8 +78,8 @@ class PolymarketClient:
         ) as resp:
             data = await resp.json()
             return data if isinstance(data, list) else []
-    
-    async def get_market_info(self, condition_id: str) -> Optional[MarketInfo]:
+
+    async def get_market_info(self, condition_id: str) -> MarketInfo | None:
         try:
             async with self._session.get(
                 f"{config.gamma_host}/markets/{condition_id}"
@@ -93,13 +90,13 @@ class PolymarketClient:
                 tokens = data.get("tokens", [])
                 if len(tokens) < 2:
                     return None
-                    
+
                 yes_token = next((t for t in tokens if t["outcome"] == "Yes"), None)
                 no_token = next((t for t in tokens if t["outcome"] == "No"), None)
-                
+
                 if not yes_token or not no_token:
                     return None
-                    
+
                 return MarketInfo(
                     condition_id=condition_id,
                     question=data.get("question", ""),
@@ -110,26 +107,26 @@ class PolymarketClient:
                     ),
                     no_token=TokenInfo(
                         token_id=no_token["token_id"],
-                        outcome="No",  
+                        outcome="No",
                         price=float(no_token.get("price", 0))
                     )
                 )
         except Exception as e:
             log.error("get_market_info_error", error=str(e), condition_id=condition_id)
             return None
-    
-    def get_order_book(self, token_id: str) -> Optional[OrderBook]:
+
+    def get_order_book(self, token_id: str) -> OrderBook | None:
         try:
             book = self.clob.get_order_book(token_id)
             bids = book.bids or []
             asks = book.asks or []
-            
+
             best_bid = float(bids[0].price) if bids else 0
             best_ask = float(asks[0].price) if asks else 1
-            
+
             bid_liq = sum(float(b.size) * float(b.price) for b in bids[:5])
             ask_liq = sum(float(a.size) * float(a.price) for a in asks[:5])
-            
+
             return OrderBook(
                 bids=bids,
                 asks=asks,
@@ -141,13 +138,13 @@ class PolymarketClient:
         except Exception as e:
             log.error("get_order_book_error", error=str(e), token_id=token_id)
             return None
-    
-    def get_midpoint(self, token_id: str) -> Optional[float]:
+
+    def get_midpoint(self, token_id: str) -> float | None:
         try:
             return float(self.clob.get_midpoint(token_id))
-        except:
+        except Exception:
             return None
-            
+
     def place_market_order(self, token_id: str, amount: float, side: str) -> dict:
         order_side = BUY if side.upper() == "BUY" else SELL
         order = MarketOrderArgs(
@@ -158,7 +155,7 @@ class PolymarketClient:
         )
         signed = self.clob.create_market_order(order)
         return self.clob.post_order(signed, OrderType.FOK)
-    
+
     def place_limit_order(self, token_id: str, price: float, size: float, side: str) -> dict:
         order_side = BUY if side.upper() == "BUY" else SELL
         order = OrderArgs(
@@ -169,10 +166,10 @@ class PolymarketClient:
         )
         signed = self.clob.create_order(order)
         return self.clob.post_order(signed, OrderType.GTC)
-    
+
     def get_balance(self) -> float:
         try:
             bal = self.clob.get_balance_allowance()
             return float(bal.get("balance", 0)) if bal else 0
-        except:
+        except Exception:
             return 0

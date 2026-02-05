@@ -1,7 +1,7 @@
 import os
-from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Optional
+from pathlib import Path
+
 from cryptography.fernet import Fernet
 from dotenv import load_dotenv
 
@@ -28,7 +28,7 @@ class AlertConfig:
     price_change_threshold: float = 0.05
     volume_spike_threshold: float = 3.0
     opportunity_min_profit: float = 1.0
-    
+
 @dataclass
 class RateLimitConfig:
     requests_per_second: float = 5.0
@@ -53,16 +53,16 @@ class Config:
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
     log_level: str = "INFO"
     data_dir: Path = field(default_factory=lambda: Path("data"))
-    
+
     def __post_init__(self):
         self.data_dir.mkdir(exist_ok=True)
         self._load_env()
-    
+
     def _load_env(self):
         self.alerts.telegram_bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
         self.alerts.telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
         self.alerts.discord_webhook_url = os.getenv("DISCORD_WEBHOOK_URL", "")
-        
+
         if margin := os.getenv("MIN_PROFIT_MARGIN"):
             self.trading.min_profit_margin = float(margin)
         if pos := os.getenv("MAX_POSITION_USD"):
@@ -74,7 +74,7 @@ class SecureKeyStore:
     def __init__(self, key_file: str = ".keystore"):
         self.key_file = Path(key_file)
         self._fernet = None
-        
+
     def _get_or_create_encryption_key(self) -> bytes:
         enc_key_file = self.key_file.with_suffix('.enc')
         if enc_key_file.exists():
@@ -83,24 +83,24 @@ class SecureKeyStore:
         enc_key_file.write_bytes(key)
         enc_key_file.chmod(0o600)
         return key
-    
+
     @property
     def fernet(self) -> Fernet:
         if self._fernet is None:
             self._fernet = Fernet(self._get_or_create_encryption_key())
         return self._fernet
-    
+
     def store_private_key(self, private_key: str):
         encrypted = self.fernet.encrypt(private_key.encode())
         self.key_file.write_bytes(encrypted)
         self.key_file.chmod(0o600)
-        
-    def load_private_key(self) -> Optional[str]:
+
+    def load_private_key(self) -> str | None:
         if not self.key_file.exists():
             return None
         encrypted = self.key_file.read_bytes()
         return self.fernet.decrypt(encrypted).decode()
-    
+
     def has_key(self) -> bool:
         return self.key_file.exists()
 

@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 import asyncio
 import json
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
-from dataclasses import dataclass, field, asdict
 from pathlib import Path
-import structlog
 
-from config import config
+import structlog
 from client import PolymarketClient
 from scanner import ArbitrageScanner
 
@@ -30,8 +29,8 @@ class SimulatedTrade:
     profit_margin: float
     position_size: float
     theoretical_profit: float
-    
-@dataclass  
+
+@dataclass
 class SimulationResult:
     start_time: str
     end_time: str
@@ -53,27 +52,27 @@ class Simulator:
         self.trades: list[SimulatedTrade] = []
         self.start_time = None
         self.opportunities_seen = 0
-        
+
     async def run(self):
         self.start_time = datetime.utcnow()
         end_time = self.start_time + self.duration
-        
+
         log.info(
             "simulation_started",
             duration=f"{self.duration.seconds // 60} minutes",
             position_size=f"${self.position_size}",
             end_time=end_time.isoformat()
         )
-        
+
         async with PolymarketClient() as client:
             scanner = ArbitrageScanner(client)
             scan_count = 0
-            
+
             while datetime.utcnow() < end_time:
                 scan_count += 1
                 elapsed = datetime.utcnow() - self.start_time
                 remaining = end_time - datetime.utcnow()
-                
+
                 log.info(
                     "scan_cycle",
                     scan=scan_count,
@@ -81,13 +80,13 @@ class Simulator:
                     remaining=f"{remaining.seconds // 60}m",
                     opportunities=len(self.trades)
                 )
-                
+
                 async for opp in scanner.scan_all_markets():
                     self.opportunities_seen += 1
-                    
+
                     if not opp.is_executable:
                         continue
-                    
+
                     trade = SimulatedTrade(
                         timestamp=datetime.utcnow().isoformat(),
                         question=opp.market.question[:80],
@@ -98,26 +97,26 @@ class Simulator:
                         position_size=min(self.position_size, opp.required_capital),
                         theoretical_profit=min(self.position_size, opp.required_capital) * opp.profit_margin
                     )
-                    
+
                     self.trades.append(trade)
-                    
+
                     log.info(
                         "opportunity_logged",
                         question=trade.question[:50],
                         margin=f"{trade.profit_margin:.2%}",
                         profit=f"${trade.theoretical_profit:.2f}"
                     )
-                
+
                 if datetime.utcnow() >= end_time:
                     break
-                    
+
                 await asyncio.sleep(60)
-        
+
         return self._generate_report()
-    
+
     def _generate_report(self) -> SimulationResult:
         end_time = datetime.utcnow()
-        
+
         if not self.trades:
             return SimulationResult(
                 start_time=self.start_time.isoformat(),
@@ -131,14 +130,14 @@ class Simulator:
                 avg_margin=0,
                 trades=[]
             )
-        
+
         total_profit = sum(t.theoretical_profit for t in self.trades)
         total_capital = sum(t.position_size for t in self.trades)
         avg_profit = total_profit / len(self.trades)
         avg_margin = sum(t.profit_margin for t in self.trades) / len(self.trades)
-        
+
         sorted_trades = sorted(self.trades, key=lambda t: t.theoretical_profit, reverse=True)
-        
+
         return SimulationResult(
             start_time=self.start_time.isoformat(),
             end_time=end_time.isoformat(),
@@ -161,13 +160,13 @@ async def main():
     parser.add_argument("--position", type=float, default=20.0, help="Position size in USD")
     parser.add_argument("--output", default="simulation_result.json", help="Output file")
     args = parser.parse_args()
-    
+
     sim = Simulator(duration_minutes=args.duration, position_size=args.position)
     result = await sim.run()
-    
+
     output_path = Path(args.output)
     output_path.write_text(json.dumps(asdict(result), indent=2))
-    
+
     print("\n" + "=" * 60)
     print("SIMULATION COMPLETE")
     print("=" * 60)
@@ -179,20 +178,20 @@ async def main():
     print(f"Average profit per trade: ${result.avg_profit_per_trade:.2f}")
     print(f"Average margin: {result.avg_margin:.2%}")
     print("=" * 60)
-    
+
     if result.best_opportunity:
-        print(f"\nBest opportunity:")
+        print("\nBest opportunity:")
         print(f"  {result.best_opportunity['question']}")
         print(f"  Margin: {result.best_opportunity['profit_margin']:.2%}")
         print(f"  Profit: ${result.best_opportunity['theoretical_profit']:.2f}")
-    
+
     print(f"\nFull results saved to: {args.output}")
-    
+
     if result.total_theoretical_profit > 0:
-        print(f"\n✅ PREDICTION: PROFITABLE")
+        print("\n✅ PREDICTION: PROFITABLE")
         print(f"   Expected daily profit: ${result.total_theoretical_profit * (1440 / result.duration_minutes):.2f}")
     else:
-        print(f"\n⚠️ PREDICTION: NO OPPORTUNITIES FOUND")
+        print("\n⚠️ PREDICTION: NO OPPORTUNITIES FOUND")
         print("   Market may be efficient or scan interval too long")
 
 if __name__ == "__main__":

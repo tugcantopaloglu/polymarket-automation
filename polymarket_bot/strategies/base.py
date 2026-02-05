@@ -1,10 +1,10 @@
 from abc import ABC, abstractmethod
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
-from typing import Optional, List, AsyncGenerator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 
-from ..client import PolymarketClient, MarketInfo, OrderBook
+from ..client import MarketInfo, OrderBook, PolymarketClient
 from ..portfolio import PortfolioManager
 from ..utils.logging import get_logger
 
@@ -30,8 +30,8 @@ class StrategyResult:
     confidence: float
     reason: str
     metadata: dict = field(default_factory=dict)
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
+
     @property
     def is_actionable(self) -> bool:
         return self.action in ("BUY", "SELL") and self.size > 0 and self.confidence >= 0.5
@@ -51,38 +51,38 @@ class Strategy(ABC):
         self._last_scan = None
         self._opportunities_found = 0
         self._trades_executed = 0
-    
+
     @property
     @abstractmethod
     def strategy_type(self) -> StrategyType:
         pass
-    
+
     @abstractmethod
-    async def scan(self, markets: List[MarketInfo]) -> AsyncGenerator[StrategyResult, None]:
+    async def scan(self, markets: list[MarketInfo]) -> AsyncGenerator[StrategyResult, None]:
         pass
-    
+
     @abstractmethod
-    async def evaluate(self, market: MarketInfo, book: OrderBook = None) -> Optional[StrategyResult]:
+    async def evaluate(self, market: MarketInfo, book: OrderBook = None) -> StrategyResult | None:
         pass
-    
+
     def should_execute(self, result: StrategyResult) -> bool:
         if not self.enabled:
             return False
-        
+
         limits = self.portfolio.get_risk_limits()
         if not limits.can_trade:
             log.debug("strategy_blocked", strategy=self.name, reason=limits.blocked_reason)
             return False
-        
+
         if result.size > limits.max_position_size:
             result.size = limits.max_position_size
-        
+
         return result.is_actionable
-    
+
     async def execute(self, result: StrategyResult) -> bool:
         if not self.should_execute(result):
             return False
-        
+
         log.info(
             "executing_strategy",
             strategy=self.name,
@@ -91,7 +91,7 @@ class Strategy(ABC):
             side=result.side,
             size=f"${result.size:.2f}"
         )
-        
+
         if result.action == "BUY":
             success = await self.portfolio.open_position(
                 market=result.market,
@@ -101,7 +101,7 @@ class Strategy(ABC):
                 strategy=self.strategy_type.value
             )
         else:
-            token_id = (result.market.yes_token.token_id if result.side.upper() == "YES" 
+            token_id = (result.market.yes_token.token_id if result.side.upper() == "YES"
                        else result.market.no_token.token_id)
             profit = await self.portfolio.close_position(
                 token_id=token_id,
@@ -109,12 +109,12 @@ class Strategy(ABC):
                 reason=self.strategy_type.value
             )
             success = profit is not None
-        
+
         if success:
             self._trades_executed += 1
-        
+
         return success
-    
+
     def get_stats(self) -> dict:
         return {
             "name": self.name,

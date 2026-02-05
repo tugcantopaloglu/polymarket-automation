@@ -1,13 +1,13 @@
+from datetime import UTC, datetime
+
 import pytest
-from datetime import datetime, timezone
 
 from polymarket_bot.analysis.market_analyzer import (
-    MarketAnalyzer,
     ArbitrageAnalyzer,
-    MarketMetrics,
-    RiskMetrics
+    MarketAnalyzer,
 )
-from polymarket_bot.client import MarketInfo, TokenInfo, OrderBook
+from polymarket_bot.client import MarketInfo, OrderBook, TokenInfo
+
 
 @pytest.fixture
 def market_analyzer():
@@ -38,7 +38,7 @@ def sample_market():
         ),
         volume_24h=18000,
         liquidity=5000,
-        end_date=datetime(2024, 12, 31, tzinfo=timezone.utc),
+        end_date=datetime(2024, 12, 31, tzinfo=UTC),
         category="Crypto"
     )
 
@@ -60,27 +60,27 @@ class TestMarketAnalyzer:
         prices = [1.0, 0.95, 0.90, 0.85, 0.80]
         momentum = market_analyzer.calculate_momentum(prices, 4)
         assert momentum == pytest.approx(0.25, rel=0.01)
-    
+
     def test_calculate_momentum_insufficient_data(self, market_analyzer):
         prices = [1.0, 0.95]
         momentum = market_analyzer.calculate_momentum(prices, 4)
         assert momentum == 0.0
-    
+
     def test_calculate_volatility(self, market_analyzer):
         prices = [1.0, 1.05, 0.95, 1.02, 0.98]
         volatility = market_analyzer.calculate_volatility(prices)
         assert volatility > 0
-    
+
     def test_calculate_volatility_single_price(self, market_analyzer):
         prices = [1.0]
         volatility = market_analyzer.calculate_volatility(prices)
         assert volatility == 0.0
-    
+
     def test_calculate_rsi(self, market_analyzer):
         prices = list(reversed([45, 46, 47, 48, 49, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40]))
         rsi = market_analyzer.calculate_rsi(prices)
         assert 0 <= rsi <= 100
-    
+
     def test_calculate_kelly_criterion(self, market_analyzer):
         kelly = market_analyzer.calculate_kelly_criterion(
             win_prob=0.6,
@@ -88,7 +88,7 @@ class TestMarketAnalyzer:
             loss_amount=1.0
         )
         assert kelly == pytest.approx(0.2, rel=0.01)
-    
+
     def test_calculate_kelly_negative(self, market_analyzer):
         kelly = market_analyzer.calculate_kelly_criterion(
             win_prob=0.3,
@@ -96,11 +96,11 @@ class TestMarketAnalyzer:
             loss_amount=1.0
         )
         assert kelly == 0.0
-    
+
     def test_calculate_risk_metrics(self, market_analyzer, sample_market, sample_order_book):
         metrics = market_analyzer.analyze_market(sample_market, sample_order_book)
         risk = market_analyzer.calculate_risk_metrics(sample_market, metrics, "YES")
-        
+
         assert 0 <= risk.win_probability <= 1
         assert 0 <= risk.loss_probability <= 1
         assert risk.win_probability + risk.loss_probability == pytest.approx(1.0)
@@ -113,7 +113,7 @@ class TestArbitrageAnalyzer:
         slippage = arbitrage_analyzer.estimate_slippage(sample_order_book, 10)
         assert slippage >= 0
         assert slippage < 0.1
-    
+
     def test_analyze_arbitrage_opportunity(self, arbitrage_analyzer, sample_market):
         yes_book = OrderBook(
             bids=[], asks=[],
@@ -127,15 +127,15 @@ class TestArbitrageAnalyzer:
             bid_liquidity=500, ask_liquidity=500,
             mid_price=0.49, spread=0.02
         )
-        
+
         analysis = arbitrage_analyzer.analyze_arbitrage(
             sample_market, yes_book, no_book, 20.0
         )
-        
+
         assert analysis.gross_margin == pytest.approx(0.03, rel=0.01)
         assert analysis.net_margin <= analysis.gross_margin
         assert analysis.confidence in ["HIGH", "MEDIUM", "LOW", "NONE"]
-    
+
     def test_analyze_no_arbitrage(self, arbitrage_analyzer, sample_market):
         yes_book = OrderBook(
             bids=[], asks=[],
@@ -149,10 +149,10 @@ class TestArbitrageAnalyzer:
             bid_liquidity=500, ask_liquidity=500,
             mid_price=0.50, spread=0.02
         )
-        
+
         analysis = arbitrage_analyzer.analyze_arbitrage(
             sample_market, yes_book, no_book, 20.0
         )
-        
+
         assert analysis.gross_margin < 0
         assert analysis.confidence == "NONE"

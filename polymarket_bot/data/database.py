@@ -1,10 +1,9 @@
-import sqlite3
 import json
-from pathlib import Path
-from datetime import datetime, timezone
-from typing import Optional, List
-from dataclasses import dataclass, asdict
+import sqlite3
 from contextlib import contextmanager
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
 
 from ..config import config
 from ..utils.logging import get_logger
@@ -18,7 +17,7 @@ class PriceRecord:
     price: float
     volume: float
     timestamp: datetime
-    
+
 @dataclass
 class TradeRecord:
     id: int
@@ -45,7 +44,7 @@ class Database:
     def __init__(self, db_path: str = None):
         self.db_path = Path(db_path or config.database.path)
         self._init_db()
-    
+
     @contextmanager
     def _get_conn(self):
         conn = sqlite3.connect(self.db_path)
@@ -53,12 +52,12 @@ class Database:
         try:
             yield conn
             conn.commit()
-        except Exception as e:
+        except Exception:
             conn.rollback()
             raise
         finally:
             conn.close()
-    
+
     def _init_db(self):
         with self._get_conn() as conn:
             conn.executescript("""
@@ -71,10 +70,10 @@ class Database:
                     timestamp TEXT NOT NULL,
                     UNIQUE(token_id, timestamp)
                 );
-                
-                CREATE INDEX IF NOT EXISTS idx_price_token_time 
+
+                CREATE INDEX IF NOT EXISTS idx_price_token_time
                 ON price_history(token_id, timestamp);
-                
+
                 CREATE TABLE IF NOT EXISTS trades (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     market_id TEXT NOT NULL,
@@ -87,10 +86,10 @@ class Database:
                     timestamp TEXT NOT NULL,
                     metadata TEXT DEFAULT '{}'
                 );
-                
-                CREATE INDEX IF NOT EXISTS idx_trades_time 
+
+                CREATE INDEX IF NOT EXISTS idx_trades_time
                 ON trades(timestamp);
-                
+
                 CREATE TABLE IF NOT EXISTS portfolio (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     token_id TEXT NOT NULL UNIQUE,
@@ -100,7 +99,7 @@ class Database:
                     avg_entry_price REAL NOT NULL,
                     updated_at TEXT NOT NULL
                 );
-                
+
                 CREATE TABLE IF NOT EXISTS alerts (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     market_id TEXT NOT NULL,
@@ -109,7 +108,7 @@ class Database:
                     triggered_at TEXT NOT NULL,
                     acknowledged INTEGER DEFAULT 0
                 );
-                
+
                 CREATE TABLE IF NOT EXISTS market_snapshots (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     market_id TEXT NOT NULL,
@@ -121,7 +120,7 @@ class Database:
                     timestamp TEXT NOT NULL,
                     UNIQUE(market_id, timestamp)
                 );
-                
+
                 CREATE TABLE IF NOT EXISTS whale_activity (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     wallet_address TEXT NOT NULL,
@@ -131,7 +130,7 @@ class Database:
                     price REAL NOT NULL,
                     timestamp TEXT NOT NULL
                 );
-                
+
                 CREATE TABLE IF NOT EXISTS strategy_performance (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     strategy TEXT NOT NULL,
@@ -147,31 +146,31 @@ class Database:
                 );
             """)
         log.info("database_initialized", path=str(self.db_path))
-    
+
     def record_price(self, token_id: str, market_id: str, price: float, volume: float = 0):
-        timestamp = datetime.now(timezone.utc).isoformat()
+        timestamp = datetime.now(UTC).isoformat()
         with self._get_conn() as conn:
             conn.execute("""
-                INSERT OR REPLACE INTO price_history 
+                INSERT OR REPLACE INTO price_history
                 (token_id, market_id, price, volume, timestamp)
                 VALUES (?, ?, ?, ?, ?)
             """, (token_id, market_id, price, volume, timestamp))
-    
+
     def get_price_history(
-        self, 
-        token_id: str, 
+        self,
+        token_id: str,
         hours: int = 24,
         limit: int = 1000
-    ) -> List[PriceRecord]:
+    ) -> list[PriceRecord]:
         with self._get_conn() as conn:
             rows = conn.execute("""
-                SELECT * FROM price_history 
-                WHERE token_id = ? 
+                SELECT * FROM price_history
+                WHERE token_id = ?
                 AND timestamp >= datetime('now', ?)
                 ORDER BY timestamp DESC
                 LIMIT ?
             """, (token_id, f'-{hours} hours', limit)).fetchall()
-            
+
         return [
             PriceRecord(
                 token_id=row["token_id"],
@@ -182,7 +181,7 @@ class Database:
             )
             for row in rows
         ]
-    
+
     def record_trade(
         self,
         market_id: str,
@@ -194,25 +193,25 @@ class Database:
         strategy: str,
         metadata: dict = None
     ):
-        timestamp = datetime.now(timezone.utc).isoformat()
+        timestamp = datetime.now(UTC).isoformat()
         with self._get_conn() as conn:
             conn.execute("""
-                INSERT INTO trades 
+                INSERT INTO trades
                 (market_id, token_id, side, price, size, profit, strategy, timestamp, metadata)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (market_id, token_id, side, price, size, profit, strategy, timestamp, 
+            """, (market_id, token_id, side, price, size, profit, strategy, timestamp,
                   json.dumps(metadata or {})))
-    
+
     def get_trades(
         self,
         strategy: str = None,
         hours: int = 24,
         limit: int = 100
-    ) -> List[TradeRecord]:
+    ) -> list[TradeRecord]:
         with self._get_conn() as conn:
             if strategy:
                 rows = conn.execute("""
-                    SELECT * FROM trades 
+                    SELECT * FROM trades
                     WHERE strategy = ?
                     AND timestamp >= datetime('now', ?)
                     ORDER BY timestamp DESC
@@ -220,12 +219,12 @@ class Database:
                 """, (strategy, f'-{hours} hours', limit)).fetchall()
             else:
                 rows = conn.execute("""
-                    SELECT * FROM trades 
+                    SELECT * FROM trades
                     WHERE timestamp >= datetime('now', ?)
                     ORDER BY timestamp DESC
                     LIMIT ?
                 """, (f'-{hours} hours', limit)).fetchall()
-        
+
         return [
             TradeRecord(
                 id=row["id"],
@@ -241,7 +240,7 @@ class Database:
             )
             for row in rows
         ]
-    
+
     def update_portfolio(
         self,
         token_id: str,
@@ -250,39 +249,39 @@ class Database:
         size: float,
         avg_entry_price: float
     ):
-        timestamp = datetime.now(timezone.utc).isoformat()
+        timestamp = datetime.now(UTC).isoformat()
         with self._get_conn() as conn:
             if size <= 0:
                 conn.execute("DELETE FROM portfolio WHERE token_id = ?", (token_id,))
             else:
                 conn.execute("""
-                    INSERT OR REPLACE INTO portfolio 
+                    INSERT OR REPLACE INTO portfolio
                     (token_id, market_id, outcome, size, avg_entry_price, updated_at)
                     VALUES (?, ?, ?, ?, ?, ?)
                 """, (token_id, market_id, outcome, size, avg_entry_price, timestamp))
-    
-    def get_portfolio(self) -> List[dict]:
+
+    def get_portfolio(self) -> list[dict]:
         with self._get_conn() as conn:
             rows = conn.execute("SELECT * FROM portfolio").fetchall()
         return [dict(row) for row in rows]
-    
+
     def record_alert(self, market_id: str, alert_type: str, message: str):
-        timestamp = datetime.now(timezone.utc).isoformat()
+        timestamp = datetime.now(UTC).isoformat()
         with self._get_conn() as conn:
             conn.execute("""
                 INSERT INTO alerts (market_id, alert_type, message, triggered_at)
                 VALUES (?, ?, ?, ?)
             """, (market_id, alert_type, message, timestamp))
-    
-    def get_unacknowledged_alerts(self, limit: int = 50) -> List[AlertRecord]:
+
+    def get_unacknowledged_alerts(self, limit: int = 50) -> list[AlertRecord]:
         with self._get_conn() as conn:
             rows = conn.execute("""
-                SELECT * FROM alerts 
+                SELECT * FROM alerts
                 WHERE acknowledged = 0
                 ORDER BY triggered_at DESC
                 LIMIT ?
             """, (limit,)).fetchall()
-        
+
         return [
             AlertRecord(
                 id=row["id"],
@@ -294,11 +293,11 @@ class Database:
             )
             for row in rows
         ]
-    
+
     def acknowledge_alert(self, alert_id: int):
         with self._get_conn() as conn:
             conn.execute("UPDATE alerts SET acknowledged = 1 WHERE id = ?", (alert_id,))
-    
+
     def record_market_snapshot(
         self,
         market_id: str,
@@ -308,21 +307,21 @@ class Database:
         volume_24h: float,
         liquidity: float
     ):
-        timestamp = datetime.now(timezone.utc).replace(second=0, microsecond=0).isoformat()
+        timestamp = datetime.now(UTC).replace(second=0, microsecond=0).isoformat()
         with self._get_conn() as conn:
             conn.execute("""
                 INSERT OR REPLACE INTO market_snapshots
                 (market_id, question, yes_price, no_price, volume_24h, liquidity, timestamp)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (market_id, question, yes_price, no_price, volume_24h, liquidity, timestamp))
-    
+
     def update_strategy_performance(
         self,
         strategy: str,
         profit: float,
         is_win: bool
     ):
-        date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        date = datetime.now(UTC).strftime("%Y-%m-%d")
         with self._get_conn() as conn:
             conn.execute("""
                 INSERT INTO strategy_performance (strategy, date, trades, wins, losses, total_profit)
@@ -334,8 +333,8 @@ class Database:
                     total_profit = total_profit + ?
             """, (strategy, date, 1 if is_win else 0, 0 if is_win else 1, profit,
                   1 if is_win else 0, 0 if is_win else 1, profit))
-    
-    def get_strategy_stats(self, strategy: str = None, days: int = 30) -> List[dict]:
+
+    def get_strategy_stats(self, strategy: str = None, days: int = 30) -> list[dict]:
         with self._get_conn() as conn:
             if strategy:
                 rows = conn.execute("""
@@ -357,19 +356,19 @@ class Database:
                     GROUP BY strategy
                 """, (f'-{days} days',)).fetchall()
         return [dict(row) for row in rows]
-    
+
     def cleanup_old_data(self, days: int = 90):
         with self._get_conn() as conn:
             conn.execute("""
-                DELETE FROM price_history 
+                DELETE FROM price_history
                 WHERE timestamp < datetime('now', ?)
             """, (f'-{days} days',))
-            
+
             conn.execute("""
-                DELETE FROM market_snapshots 
+                DELETE FROM market_snapshots
                 WHERE timestamp < datetime('now', ?)
             """, (f'-{days} days',))
-            
+
             deleted = conn.total_changes
             log.info("cleaned_old_data", deleted_rows=deleted)
         return deleted

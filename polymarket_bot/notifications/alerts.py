@@ -1,12 +1,12 @@
 import asyncio
-import aiohttp
 from dataclasses import dataclass, field
-from typing import Optional, List, Callable
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from enum import Enum
 
-from ..config import config
+import aiohttp
+
 from ..client import MarketInfo
+from ..config import config
 from ..data.database import db
 from ..utils.logging import get_logger
 
@@ -30,35 +30,35 @@ class Alert:
     market_id: str = ""
     severity: str = "INFO"
     data: dict = field(default_factory=dict)
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 class TelegramNotifier:
     def __init__(self, bot_token: str, chat_id: str):
         self.bot_token = bot_token
         self.chat_id = chat_id
         self.base_url = f"https://api.telegram.org/bot{bot_token}"
-        self._session: Optional[aiohttp.ClientSession] = None
-    
+        self._session: aiohttp.ClientSession | None = None
+
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
             self._session = aiohttp.ClientSession()
         return self._session
-    
+
     async def send(self, alert: Alert) -> bool:
         if not self.bot_token or not self.chat_id:
             return False
-        
+
         emoji = self._get_emoji(alert)
         severity_label = f"[{alert.severity}]" if alert.severity != "INFO" else ""
-        
+
         text = f"{emoji} *{alert.title}* {severity_label}\n\n{alert.message}"
-        
+
         if alert.data:
             details = "\n".join(f"• {k}: `{v}`" for k, v in alert.data.items())
             text += f"\n\n{details}"
-        
+
         text += f"\n\n🕐 {alert.timestamp.strftime('%Y-%m-%d %H:%M:%S UTC')}"
-        
+
         try:
             session = await self._get_session()
             async with session.post(
@@ -79,7 +79,7 @@ class TelegramNotifier:
         except Exception as e:
             log.error("telegram_error", error=str(e))
             return False
-    
+
     def _get_emoji(self, alert: Alert) -> str:
         emoji_map = {
             AlertType.PRICE_CHANGE: "📊",
@@ -92,7 +92,7 @@ class TelegramNotifier:
             AlertType.MARKET_RESOLVED: "🏁"
         }
         return emoji_map.get(alert.alert_type, "ℹ️")
-    
+
     async def close(self):
         if self._session:
             await self._session.close()
@@ -100,19 +100,19 @@ class TelegramNotifier:
 class DiscordNotifier:
     def __init__(self, webhook_url: str):
         self.webhook_url = webhook_url
-        self._session: Optional[aiohttp.ClientSession] = None
-    
+        self._session: aiohttp.ClientSession | None = None
+
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
             self._session = aiohttp.ClientSession()
         return self._session
-    
+
     async def send(self, alert: Alert) -> bool:
         if not self.webhook_url:
             return False
-        
+
         color = self._get_color(alert)
-        
+
         embed = {
             "title": f"{self._get_emoji(alert)} {alert.title}",
             "description": alert.message,
@@ -120,13 +120,13 @@ class DiscordNotifier:
             "timestamp": alert.timestamp.isoformat(),
             "footer": {"text": f"Polymarket Bot | {alert.severity}"}
         }
-        
+
         if alert.data:
             embed["fields"] = [
                 {"name": k, "value": str(v), "inline": True}
                 for k, v in list(alert.data.items())[:25]
             ]
-        
+
         try:
             session = await self._get_session()
             async with session.post(
@@ -142,7 +142,7 @@ class DiscordNotifier:
         except Exception as e:
             log.error("discord_error", error=str(e))
             return False
-    
+
     def _get_color(self, alert: Alert) -> int:
         color_map = {
             "INFO": 0x3498db,
@@ -151,7 +151,7 @@ class DiscordNotifier:
             "SUCCESS": 0x2ecc71
         }
         return color_map.get(alert.severity, 0x3498db)
-    
+
     def _get_emoji(self, alert: Alert) -> str:
         emoji_map = {
             AlertType.PRICE_CHANGE: "📊",
@@ -164,7 +164,7 @@ class DiscordNotifier:
             AlertType.MARKET_RESOLVED: "🏁"
         }
         return emoji_map.get(alert.alert_type, "ℹ️")
-    
+
     async def close(self):
         if self._session:
             await self._session.close()
@@ -177,7 +177,7 @@ class PriceAlert:
     target_price: float
     current_price: float
     triggered: bool = False
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 class AlertManager:
     def __init__(self):
@@ -186,38 +186,38 @@ class AlertManager:
             config.alerts.telegram_chat_id
         )
         self.discord = DiscordNotifier(config.alerts.discord_webhook_url)
-        self.price_alerts: List[PriceAlert] = []
+        self.price_alerts: list[PriceAlert] = []
         self._price_cache: dict[str, float] = {}
         self._alert_cooldowns: dict[str, datetime] = {}
         self._cooldown_minutes = 5
-    
+
     def _is_on_cooldown(self, key: str) -> bool:
         if key not in self._alert_cooldowns:
             return False
-        elapsed = datetime.now(timezone.utc) - self._alert_cooldowns[key]
+        elapsed = datetime.now(UTC) - self._alert_cooldowns[key]
         return elapsed < timedelta(minutes=self._cooldown_minutes)
-    
+
     def _set_cooldown(self, key: str):
-        self._alert_cooldowns[key] = datetime.now(timezone.utc)
-    
+        self._alert_cooldowns[key] = datetime.now(UTC)
+
     async def send_alert(self, alert: Alert, force: bool = False):
         cooldown_key = f"{alert.alert_type.value}:{alert.market_id}"
-        
+
         if not force and self._is_on_cooldown(cooldown_key):
             log.debug("alert_cooldown", key=cooldown_key)
             return
-        
+
         db.record_alert(alert.market_id, alert.alert_type.value, alert.message)
-        
-        results = await asyncio.gather(
+
+        await asyncio.gather(
             self.telegram.send(alert),
             self.discord.send(alert),
             return_exceptions=True
         )
-        
+
         self._set_cooldown(cooldown_key)
         log.info("alert_sent", type=alert.alert_type.value, severity=alert.severity)
-    
+
     def add_price_alert(
         self,
         market_id: str,
@@ -235,18 +235,18 @@ class AlertManager:
         )
         self.price_alerts.append(alert)
         log.info("price_alert_added", token_id=token_id, condition=condition, target=target_price)
-    
+
     async def check_price_alerts(self, token_id: str, current_price: float):
         for alert in self.price_alerts:
             if alert.token_id != token_id or alert.triggered:
                 continue
-            
+
             triggered = False
             if alert.condition == "above" and current_price >= alert.target_price:
                 triggered = True
             elif alert.condition == "below" and current_price <= alert.target_price:
                 triggered = True
-            
+
             if triggered:
                 alert.triggered = True
                 await self.send_alert(Alert(
@@ -262,7 +262,7 @@ class AlertManager:
                         "Condition": alert.condition.upper()
                     }
                 ), force=True)
-    
+
     async def check_price_movement(
         self,
         market: MarketInfo,
@@ -271,9 +271,9 @@ class AlertManager:
     ):
         if previous_price <= 0:
             return
-        
+
         change = (current_price - previous_price) / previous_price
-        
+
         if abs(change) >= config.alerts.price_change_threshold:
             direction = "📈 UP" if change > 0 else "📉 DOWN"
             await self.send_alert(Alert(
@@ -288,7 +288,7 @@ class AlertManager:
                     "Change": f"{change:+.1%}"
                 }
             ))
-    
+
     async def alert_arbitrage_opportunity(
         self,
         market: MarketInfo,
@@ -297,7 +297,7 @@ class AlertManager:
     ):
         if expected_profit < config.alerts.opportunity_min_profit:
             return
-        
+
         await self.send_alert(Alert(
             alert_type=AlertType.ARBITRAGE,
             title="Arbitrage Opportunity Detected",
@@ -311,7 +311,7 @@ class AlertManager:
                 "No Price": f"${market.no_token.price:.3f}"
             }
         ))
-    
+
     async def alert_trade_executed(
         self,
         market: MarketInfo,
@@ -335,7 +335,7 @@ class AlertManager:
                 "Strategy": strategy
             }
         ), force=True)
-    
+
     async def alert_risk_warning(
         self,
         title: str,
@@ -349,7 +349,7 @@ class AlertManager:
             severity="WARNING",
             data=data or {}
         ), force=True)
-    
+
     async def alert_whale_activity(
         self,
         wallet: str,
@@ -371,12 +371,12 @@ class AlertManager:
                 "Price": f"${price:.3f}"
             }
         ))
-    
+
     def update_price_cache(self, token_id: str, price: float):
         previous = self._price_cache.get(token_id)
         self._price_cache[token_id] = price
         return previous
-    
+
     async def close(self):
         await self.telegram.close()
         await self.discord.close()

@@ -14,7 +14,16 @@ Features:
 __version__ = "2.0.0"
 __author__ = "Tuğcan Topaloğlu"
 
-from .config import Config, config
-from .client import PolymarketClient
-from .portfolio import PortfolioManager
-from .alerts import AlertManager
+from .alerts import AlertManager as AlertManager
+from .client import PolymarketClient as PolymarketClient
+from .config import Config as Config
+from .config import config as config
+from .portfolio import PortfolioManager as PortfolioManager
+
+__all__ = [
+    "AlertManager",
+    "PolymarketClient",
+    "Config",
+    "config",
+    "PortfolioManager",
+]
