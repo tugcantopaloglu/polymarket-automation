@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 255, 255, 255;
+  --background-start-rgb: 1, 4, 9;
+  --background-end-rgb: 13, 17, 23;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(
+      to bottom,
+      rgb(var(--background-start-rgb)),
+      rgb(var(--background-end-rgb))
+    );
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+.card {
+  @apply bg-polymarket-card rounded-lg border border-polymarket-border p-4;
+}
+
+.stat-card {
+  @apply card hover:border-polymarket-primary/50 transition-colors;
+}
+
+.profit {
+  @apply text-green-400;
+}
+
+.loss {
+  @apply text-red-400;
+}

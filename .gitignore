@@ -45,3 +45,23 @@ dist/
 .DS_Store
 Thumbs.db
 simulation_result.json
+
+# Frontend
+node_modules/
+.next/
+frontend/.next/
+frontend/node_modules/
+
+# Monitoring
+prometheus-data/
+grafana-data/
+alertmanager-data/
+
+# Ruff
+.ruff_cache/
+
+# Reports
+reports/
+
+# Data directories
+data/
