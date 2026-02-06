@@ -8,6 +8,7 @@ on:
 jobs:
   generate-report:
     runs-on: ubuntu-latest
+    if: ${{ vars.MONITORING_ENABLED == 'true' }}
     
     steps:
       - uses: actions/checkout@v4
@@ -39,12 +40,17 @@ jobs:
 
   health-check:
     runs-on: ubuntu-latest
+    if: ${{ vars.MONITORING_ENABLED == 'true' }}
     
     steps:
       - name: Check Bot Health
         env:
           BOT_API_URL: ${{ secrets.BOT_API_URL }}
         run: |
+          if [ -z "$BOT_API_URL" ]; then
+            echo "BOT_API_URL not configured, skipping health check"
+            exit 0
+          fi
           response=$(curl -s -o /dev/null -w "%{http_code}" "${BOT_API_URL}/api/health" || echo "000")
           if [ "$response" != "200" ]; then
             echo "Bot health check failed with status: $response"
@@ -58,6 +64,8 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-            -d chat_id="${TELEGRAM_CHAT_ID}" \
-            -d text="⚠️ Polymarket Bot health check failed!"
+          if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
+            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              -d chat_id="${TELEGRAM_CHAT_ID}" \
+              -d text="⚠️ Polymarket Bot health check failed!"
+          fi
