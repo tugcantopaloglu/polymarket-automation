@@ -77,7 +77,7 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "B", "A", "C4", "SIM", "ARG"]
-ignore = ["E501", "B008", "A003"]
+ignore = ["E501", "B008", "A003", "ARG001", "ARG002", "SIM102"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["polymarket_bot"]

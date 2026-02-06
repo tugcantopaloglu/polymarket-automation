@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 import requests
@@ -36,9 +36,9 @@ def generate_report(data, trades):
     strategies = data.get("strategies", [])
 
     today = datetime.now().strftime("%Y-%m-%d")
-    
+
     report_lines = [
-        f"📊 *Polymarket Bot Daily Report*",
+        "📊 *Polymarket Bot Daily Report*",
         f"📅 {today}",
         "",
         "*Portfolio Summary*",
@@ -110,26 +110,26 @@ def save_report(report, data):
     reports_dir.mkdir(exist_ok=True)
 
     today = datetime.now().strftime("%Y-%m-%d")
-    
+
     with open(reports_dir / f"report_{today}.txt", "w") as f:
         f.write(report)
-    
+
     if data:
         with open(reports_dir / f"data_{today}.json", "w") as f:
             json.dump(data, f, indent=2)
 
 def main():
     print("Generating daily report...")
-    
+
     data = fetch_dashboard_data()
     trades = fetch_trades()
-    
+
     report = generate_report(data, trades)
     print("\n" + report + "\n")
-    
+
     save_report(report, data)
     print("Report saved to reports/")
-    
+
     if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
         if send_telegram_message(report):
             print("Report sent to Telegram")
