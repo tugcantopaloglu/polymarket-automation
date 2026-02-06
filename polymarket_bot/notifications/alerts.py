@@ -242,9 +242,7 @@ class AlertManager:
                 continue
 
             triggered = False
-            if alert.condition == "above" and current_price >= alert.target_price:
-                triggered = True
-            elif alert.condition == "below" and current_price <= alert.target_price:
+            if alert.condition == "above" and current_price >= alert.target_price or alert.condition == "below" and current_price <= alert.target_price:
                 triggered = True
 
             if triggered:

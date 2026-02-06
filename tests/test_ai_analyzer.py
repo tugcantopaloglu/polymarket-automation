@@ -1,12 +1,13 @@
-import pytest
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from polymarket_bot.ai.analyzer import (
     AIAnalysis,
+    AnthropicProvider,
     MarketAIAnalyzer,
     OpenAIProvider,
-    AnthropicProvider,
 )
 from polymarket_bot.client import MarketInfo, TokenInfo
 
@@ -49,7 +50,7 @@ class TestAIAnalysis:
             recommendation="BUY YES",
             timestamp=datetime.now(UTC)
         )
-        
+
         assert analysis.prediction == 0.65
         assert analysis.confidence == 0.8
         assert len(analysis.risk_factors) == 1
@@ -69,22 +70,22 @@ class TestOpenAIProvider:
                 }
             }]
         }
-        
+
         with patch('polymarket_bot.ai.analyzer.aiohttp.ClientSession') as mock_session:
             mock_resp = AsyncMock()
             mock_resp.status = 200
             mock_resp.json = AsyncMock(return_value=mock_response)
-            
+
             mock_post_ctx = AsyncMock()
             mock_post_ctx.__aenter__ = AsyncMock(return_value=mock_resp)
             mock_post_ctx.__aexit__ = AsyncMock(return_value=None)
-            
+
             mock_session_instance = MagicMock()
             mock_session_instance.post = MagicMock(return_value=mock_post_ctx)
             mock_session_instance.__aenter__ = AsyncMock(return_value=mock_session_instance)
             mock_session_instance.__aexit__ = AsyncMock(return_value=None)
             mock_session.return_value = mock_session_instance
-            
+
             result = await provider.analyze("Test prompt")
             assert "probability" in result
 
@@ -130,7 +131,7 @@ class TestMarketAIAnalyzer:
 
     def test_build_analysis_prompt(self, analyzer, sample_market):
         prompt = analyzer._build_analysis_prompt(sample_market)
-        
+
         assert sample_market.question in prompt
         assert "YES" in prompt
         assert "NO" in prompt
@@ -142,13 +143,13 @@ class TestMarketAIAnalyzer:
             {"timestamp": "2024-01-15T11:00:00", "price": 0.44}
         ]
         prompt = analyzer._build_analysis_prompt(sample_market, price_history=history)
-        
+
         assert "Price History" in prompt
 
     def test_build_analysis_prompt_with_news(self, analyzer, sample_market):
         news = "Bitcoin ETF approved by SEC"
         prompt = analyzer._build_analysis_prompt(sample_market, news_context=news)
-        
+
         assert news in prompt
 
     def test_parse_response_valid_json(self, analyzer):
@@ -162,9 +163,9 @@ class TestMarketAIAnalyzer:
             "recommendation": "BUY YES"
         }
         Some additional text.'''
-        
+
         analysis = analyzer._parse_response("test-market", response)
-        
+
         assert analysis.prediction == 0.65
         assert analysis.confidence == 0.85
         assert "Strong market momentum" in analysis.reasoning
@@ -173,16 +174,16 @@ class TestMarketAIAnalyzer:
 
     def test_parse_response_invalid_json(self, analyzer):
         response = "This is not valid JSON at all"
-        
+
         analysis = analyzer._parse_response("test-market", response)
-        
+
         assert analysis.prediction == 0.5
         assert analysis.confidence == 0.3
         assert analysis.recommendation == "HOLD"
 
     def test_fallback_analysis(self, analyzer, sample_market):
         analysis = analyzer._fallback_analysis(sample_market)
-        
+
         assert analysis.market_id == sample_market.condition_id
         assert analysis.prediction == sample_market.yes_token.price
         assert analysis.confidence == 0.3
@@ -200,21 +201,21 @@ class TestMarketAIAnalyzer:
             recommendation="BUY YES",
             timestamp=datetime.now(UTC)
         )
-        
+
         cache_key = f"{sample_market.condition_id}_{datetime.now(UTC).strftime('%Y%m%d%H')}"
         analyzer._cache[cache_key] = cached_analysis
-        
+
         result = await analyzer.analyze_market(sample_market)
-        
+
         assert result.prediction == 0.70
         assert result.reasoning == "Cached result"
 
     @pytest.mark.asyncio
     async def test_analyze_market_error_fallback(self, analyzer, sample_market):
         analyzer.provider.analyze = AsyncMock(side_effect=Exception("API Error"))
-        
+
         result = await analyzer.analyze_market(sample_market)
-        
+
         assert result.prediction == sample_market.yes_token.price
         assert "unavailable" in result.reasoning.lower()
 
@@ -230,10 +231,10 @@ class TestMarketAIAnalyzer:
             recommendation="HOLD",
             timestamp=datetime.now(UTC)
         ))
-        
+
         markets = [sample_market, sample_market]
         results = await analyzer.batch_analyze(markets, max_concurrent=2)
-        
+
         assert len(results) == 2
         assert analyzer.analyze_market.call_count == 2
 
@@ -247,17 +248,17 @@ class TestMarketAIAnalyzer:
             "recommendations": ["Diversify", "Reduce exposure"]
         }
         ''')
-        
+
         result = await analyzer.get_risk_assessment([sample_market], 1000.0)
-        
+
         assert "risk_level" in result
         assert isinstance(result["recommendations"], list)
 
     @pytest.mark.asyncio
     async def test_get_risk_assessment_error(self, analyzer, sample_market):
         analyzer.provider.analyze = AsyncMock(side_effect=Exception("Error"))
-        
+
         result = await analyzer.get_risk_assessment([sample_market], 1000.0)
-        
+
         assert result["risk_level"] == 5
         assert "Diversify" in result["recommendations"][0]

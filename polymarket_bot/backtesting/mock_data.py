@@ -1,6 +1,7 @@
 import random
-from datetime import UTC, datetime, timedelta
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+
 
 @dataclass
 class MockMarket:
@@ -27,19 +28,19 @@ def generate_mock_market(
     samples_per_day: int = 24
 ) -> MockMarket:
     total_samples = days * samples_per_day
-    
+
     initial_yes = random.uniform(0.3, 0.7)
     yes_prices = generate_random_walk(initial_yes, total_samples)
     no_prices = [max(0.01, min(0.99, 1 - p + random.gauss(0, 0.01))) for p in yes_prices]
-    
+
     base_volume = random.uniform(1000, 50000)
     volumes = [base_volume * (1 + random.gauss(0, 0.3)) for _ in range(total_samples)]
-    
+
     timestamps = [
         start_date + timedelta(hours=i)
         for i in range(total_samples)
     ]
-    
+
     return MockMarket(
         condition_id=condition_id,
         question=question,
@@ -58,14 +59,14 @@ def generate_arbitrage_opportunity_market(
     opportunity_frequency: float = 0.05
 ) -> MockMarket:
     market = generate_mock_market(condition_id, question, start_date, days, samples_per_day)
-    
+
     for i in range(len(market.yes_prices)):
         if random.random() < opportunity_frequency:
             spread = random.uniform(0.03, 0.08)
             total = 1.0 - spread
             market.yes_prices[i] = total * random.uniform(0.4, 0.6)
             market.no_prices[i] = total - market.yes_prices[i]
-    
+
     return market
 
 def generate_trending_market(
@@ -77,21 +78,21 @@ def generate_trending_market(
     trend_direction: float = 0.3
 ) -> MockMarket:
     total_samples = days * samples_per_day
-    
+
     initial_yes = 0.3 if trend_direction > 0 else 0.7
-    
+
     yes_prices = [initial_yes]
     for _ in range(total_samples - 1):
         drift = trend_direction / total_samples
         change = drift + random.gauss(0, 0.015)
         new_price = max(0.01, min(0.99, yes_prices[-1] + change))
         yes_prices.append(new_price)
-    
+
     no_prices = [1 - p for p in yes_prices]
-    
+
     timestamps = [start_date + timedelta(hours=i) for i in range(total_samples)]
     volumes = [random.uniform(5000, 20000) for _ in range(total_samples)]
-    
+
     return MockMarket(
         condition_id=condition_id,
         question=question,
@@ -108,7 +109,7 @@ def generate_mock_dataset(
 ) -> list[MockMarket]:
     if start_date is None:
         start_date = datetime.now(UTC) - timedelta(days=days)
-    
+
     questions = [
         "Will BTC exceed $100,000 by end of year?",
         "Will the Fed cut rates in March?",
@@ -121,11 +122,11 @@ def generate_mock_dataset(
         "Will renewable energy surpass 25% of grid?",
         "Will housing prices decline 5% or more?",
     ] * (num_markets // 10 + 1)
-    
+
     markets = []
     for i in range(num_markets):
         choice = random.random()
-        
+
         if choice < 0.3:
             market = generate_arbitrage_opportunity_market(
                 f"market-{i}",
@@ -149,14 +150,14 @@ def generate_mock_dataset(
                 start_date,
                 days
             )
-        
+
         markets.append(market)
-    
+
     return markets
 
 def markets_to_snapshots(markets: list[MockMarket]) -> list[dict]:
     snapshots = []
-    
+
     for market in markets:
         for i, ts in enumerate(market.timestamps):
             snapshots.append({
@@ -168,6 +169,6 @@ def markets_to_snapshots(markets: list[MockMarket]) -> list[dict]:
                 "volume": market.volumes[i],
                 "liquidity": market.volumes[i] * 0.1
             })
-    
+
     snapshots.sort(key=lambda x: x["timestamp"])
     return snapshots

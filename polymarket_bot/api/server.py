@@ -1,7 +1,6 @@
-from datetime import UTC, datetime
-from collections.abc import AsyncGenerator
 import asyncio
 import json
+from datetime import UTC, datetime
 
 from aiohttp import web
 
@@ -188,7 +187,7 @@ class APIServer:
     async def update_settings(self, request: web.Request) -> web.Response:
         try:
             data = await request.json()
-            
+
             if "trading" in data:
                 for key, value in data["trading"].items():
                     snake_key = self._camel_to_snake(key)

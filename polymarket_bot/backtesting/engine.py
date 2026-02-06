@@ -75,36 +75,36 @@ class BacktestEngine:
         start = datetime.fromisoformat(start_date) if start_date else end - timedelta(days=30)
 
         strategy_impl = self._get_strategy(strategy)
-        
+
         historical_data = await self._load_historical_data(start, end, markets)
-        
+
         current_date = start
         while current_date <= end:
             day_data = [d for d in historical_data if d.get("date", "").startswith(current_date.strftime("%Y-%m-%d"))]
-            
+
             for market_data in day_data:
                 self._update_positions(market_data)
-                
+
                 for pos_id, position in list(self.positions.items()):
                     if strategy_impl.should_exit(position.__dict__, market_data):
                         self._close_position(pos_id, market_data)
-                
+
                 portfolio_state = {
                     "capital": self.capital,
                     "positions": len(self.positions),
                     "exposure": self._calculate_exposure()
                 }
-                
+
                 should_enter, side, size = strategy_impl.should_enter(market_data, portfolio_state)
                 if should_enter and self._can_open_position(size):
                     self._open_position(market_data, side, size, strategy)
-            
+
             self.equity_curve.append({
                 "date": current_date.isoformat(),
                 "value": self._calculate_portfolio_value(),
                 "pnl": self._calculate_portfolio_value() - self.initial_capital
             })
-            
+
             current_date += timedelta(days=1)
 
         for pos_id in list(self.positions.keys()):
@@ -148,11 +148,11 @@ class BacktestEngine:
     def _open_position(self, market_data: dict, side: str, size: float, strategy: str):
         price = market_data.get("yes_price" if side == "YES" else "no_price", 0.5)
         cost = size * price
-        
+
         if cost > self.capital:
             size = self.capital / price
             cost = size * price
-        
+
         trade = BacktestTrade(
             timestamp=datetime.fromisoformat(market_data.get("date", datetime.now(UTC).isoformat())),
             market_id=market_data.get("market_id", ""),
@@ -163,26 +163,26 @@ class BacktestEngine:
             entry_price=price,
             strategy=strategy
         )
-        
+
         self.positions[f"{market_data.get('market_id')}_{side}"] = trade
         self.capital -= cost
 
     def _close_position(self, position_id: str, market_data: dict):
         if position_id not in self.positions:
             return
-        
+
         position = self.positions.pop(position_id)
         exit_price = market_data.get(f"{position.outcome.lower()}_price", position.entry_price)
-        
+
         position.exit_price = exit_price
         position.exit_timestamp = datetime.fromisoformat(market_data.get("date", datetime.now(UTC).isoformat()))
         position.pnl = position.size * (exit_price - position.entry_price)
-        
+
         self.capital += position.size * exit_price
         self.closed_trades.append(position)
 
     def _update_positions(self, market_data: dict):
-        for pos_id, position in self.positions.items():
+        for _pos_id, position in self.positions.items():
             if market_data.get("market_id") == position.market_id:
                 pass
 
@@ -206,7 +206,7 @@ class BacktestEngine:
         losers = [t for t in self.closed_trades if t.pnl < 0]
 
         win_rate = len(winners) / len(self.closed_trades) if self.closed_trades else 0
-        
+
         gross_profit = sum(t.pnl for t in winners)
         gross_loss = abs(sum(t.pnl for t in losers))
         profit_factor = gross_profit / gross_loss if gross_loss > 0 else float('inf')
@@ -280,16 +280,16 @@ class BacktestEngine:
     def _calculate_max_drawdown(self) -> float:
         if not self.equity_curve:
             return 0.0
-        
+
         peak = self.initial_capital
         max_dd = 0.0
-        
+
         for point in self.equity_curve:
             value = point.get("value", self.initial_capital)
             peak = max(peak, value)
             dd = (peak - value) / peak
             max_dd = max(max_dd, dd)
-        
+
         return max_dd
 
 
@@ -298,7 +298,7 @@ class ArbitrageBacktestStrategy:
         yes_price = market_data.get("yes_price", 0.5)
         no_price = market_data.get("no_price", 0.5)
         spread = 1.0 - (yes_price + no_price)
-        
+
         if spread > 0.02 and portfolio.get("exposure", 0) < 0.5:
             return True, "YES" if yes_price < no_price else "NO", 20.0
         return False, "", 0
@@ -314,7 +314,7 @@ class BondingBacktestStrategy:
     def should_enter(self, market_data: dict, portfolio: dict) -> tuple[bool, str, float]:
         yes_price = market_data.get("yes_price", 0.5)
         no_price = market_data.get("no_price", 0.5)
-        
+
         if yes_price > 0.92 and portfolio.get("exposure", 0) < 0.5:
             return True, "YES", 25.0
         if no_price > 0.92 and portfolio.get("exposure", 0) < 0.5:
@@ -325,7 +325,7 @@ class BondingBacktestStrategy:
         entry = position.get("entry_price", 0.5)
         outcome = position.get("outcome", "YES")
         current = market_data.get(f"{outcome.lower()}_price", entry)
-        
+
         pnl_pct = (current - entry) / entry
         return pnl_pct > 0.05 or pnl_pct < -0.15
 
@@ -341,7 +341,7 @@ class MomentumBacktestStrategy:
 class ValueBacktestStrategy:
     def should_enter(self, market_data: dict, portfolio: dict) -> tuple[bool, str, float]:
         yes_price = market_data.get("yes_price", 0.5)
-        
+
         if 0.3 < yes_price < 0.7 and portfolio.get("exposure", 0) < 0.3:
             expected_value = (0.5 - yes_price) * 0.3
             if expected_value > 0.02:
@@ -352,6 +352,6 @@ class ValueBacktestStrategy:
         entry = position.get("entry_price", 0.5)
         outcome = position.get("outcome", "YES")
         current = market_data.get(f"{outcome.lower()}_price", entry)
-        
+
         pnl_pct = (current - entry) / entry
         return pnl_pct > 0.15 or pnl_pct < -0.10

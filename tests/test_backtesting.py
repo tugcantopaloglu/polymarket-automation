@@ -1,19 +1,20 @@
-import pytest
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from polymarket_bot.backtesting.engine import (
+    ArbitrageBacktestStrategy,
     BacktestEngine,
     BacktestTrade,
-    ArbitrageBacktestStrategy,
     BondingBacktestStrategy,
     ValueBacktestStrategy,
 )
 from polymarket_bot.backtesting.mock_data import (
-    generate_mock_market,
     generate_arbitrage_opportunity_market,
-    generate_trending_market,
     generate_mock_dataset,
+    generate_mock_market,
+    generate_trending_market,
     markets_to_snapshots,
 )
 
@@ -115,7 +116,7 @@ class TestArbitrageBacktestStrategy:
     def test_should_enter_with_spread(self, strategy):
         market_data = {"yes_price": 0.45, "no_price": 0.50}
         portfolio = {"exposure": 0.2}
-        
+
         should_enter, side, size = strategy.should_enter(market_data, portfolio)
         assert should_enter is True
         assert size > 0
@@ -123,27 +124,27 @@ class TestArbitrageBacktestStrategy:
     def test_should_not_enter_no_spread(self, strategy):
         market_data = {"yes_price": 0.50, "no_price": 0.50}
         portfolio = {"exposure": 0.2}
-        
+
         should_enter, _, _ = strategy.should_enter(market_data, portfolio)
         assert should_enter is False
 
     def test_should_not_enter_high_exposure(self, strategy):
         market_data = {"yes_price": 0.45, "no_price": 0.50}
         portfolio = {"exposure": 0.6}
-        
+
         should_enter, _, _ = strategy.should_enter(market_data, portfolio)
         assert should_enter is False
 
     def test_should_exit_when_spread_closes(self, strategy):
         position = {"outcome": "YES", "entry_price": 0.45}
         market_data = {"yes_price": 0.50, "no_price": 0.50}
-        
+
         assert strategy.should_exit(position, market_data) is True
 
     def test_should_not_exit_spread_remains(self, strategy):
         position = {"outcome": "YES", "entry_price": 0.45}
         market_data = {"yes_price": 0.45, "no_price": 0.52}
-        
+
         assert strategy.should_exit(position, market_data) is False
 
 
@@ -155,7 +156,7 @@ class TestBondingBacktestStrategy:
     def test_should_enter_high_yes_probability(self, strategy):
         market_data = {"yes_price": 0.95, "no_price": 0.05}
         portfolio = {"exposure": 0.2}
-        
+
         should_enter, side, size = strategy.should_enter(market_data, portfolio)
         assert should_enter is True
         assert side == "YES"
@@ -163,7 +164,7 @@ class TestBondingBacktestStrategy:
     def test_should_enter_high_no_probability(self, strategy):
         market_data = {"yes_price": 0.05, "no_price": 0.95}
         portfolio = {"exposure": 0.2}
-        
+
         should_enter, side, size = strategy.should_enter(market_data, portfolio)
         assert should_enter is True
         assert side == "NO"
@@ -171,20 +172,20 @@ class TestBondingBacktestStrategy:
     def test_should_not_enter_low_probability(self, strategy):
         market_data = {"yes_price": 0.60, "no_price": 0.40}
         portfolio = {"exposure": 0.2}
-        
+
         should_enter, _, _ = strategy.should_enter(market_data, portfolio)
         assert should_enter is False
 
     def test_should_exit_on_profit(self, strategy):
         position = {"outcome": "YES", "entry_price": 0.90}
         market_data = {"yes_price": 0.96}
-        
+
         assert strategy.should_exit(position, market_data) is True
 
     def test_should_exit_on_loss(self, strategy):
         position = {"outcome": "YES", "entry_price": 0.95}
         market_data = {"yes_price": 0.80}
-        
+
         assert strategy.should_exit(position, market_data) is True
 
 
@@ -196,7 +197,7 @@ class TestValueBacktestStrategy:
     def test_should_enter_undervalued(self, strategy):
         market_data = {"yes_price": 0.35}
         portfolio = {"exposure": 0.2}
-        
+
         should_enter, side, _ = strategy.should_enter(market_data, portfolio)
         assert should_enter is True
         assert side == "YES"
@@ -204,7 +205,7 @@ class TestValueBacktestStrategy:
     def test_should_not_enter_overexposed(self, strategy):
         market_data = {"yes_price": 0.35}
         portfolio = {"exposure": 0.4}
-        
+
         should_enter, _, _ = strategy.should_enter(market_data, portfolio)
         assert should_enter is False
 
@@ -217,7 +218,7 @@ class TestMockDataGeneration:
             datetime.now(UTC),
             days=7
         )
-        
+
         assert market.condition_id == "test-id"
         assert len(market.yes_prices) == 7 * 24
         assert len(market.no_prices) == 7 * 24
@@ -231,7 +232,7 @@ class TestMockDataGeneration:
             days=7,
             opportunity_frequency=0.5
         )
-        
+
         has_opportunity = any(
             (1 - market.yes_prices[i] - market.no_prices[i]) > 0.02
             for i in range(len(market.yes_prices))
@@ -246,13 +247,13 @@ class TestMockDataGeneration:
             days=7,
             trend_direction=0.3
         )
-        
+
         assert market.yes_prices[-1] > market.yes_prices[0]
 
     def test_generate_mock_dataset(self):
         dataset = generate_mock_dataset(num_markets=5, days=7)
         assert len(dataset) == 5
-        
+
         for market in dataset:
             assert market.condition_id
             assert market.question
@@ -260,11 +261,11 @@ class TestMockDataGeneration:
     def test_markets_to_snapshots(self):
         markets = generate_mock_dataset(num_markets=2, days=1)
         snapshots = markets_to_snapshots(markets)
-        
+
         assert len(snapshots) > 0
         assert "timestamp" in snapshots[0]
         assert "yes_price" in snapshots[0]
-        
+
         timestamps = [s["timestamp"] for s in snapshots]
         assert timestamps == sorted(timestamps)
 
@@ -281,7 +282,7 @@ class TestBacktestTrade:
             entry_price=0.5,
             strategy="arbitrage"
         )
-        
+
         assert trade.pnl == 0.0
         assert trade.exit_price is None
 
@@ -298,5 +299,5 @@ class TestBacktestTrade:
             strategy="arbitrage"
         )
         trade.pnl = trade.size * (trade.exit_price - trade.entry_price)
-        
+
         assert abs(trade.pnl - 10.0) < 0.001

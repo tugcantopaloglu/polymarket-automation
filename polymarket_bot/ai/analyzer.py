@@ -61,7 +61,7 @@ class OpenAIProvider(AIProvider):
                     error = await resp.text()
                     log.error("openai_error", status=resp.status, error=error)
                     raise Exception(f"OpenAI API error: {resp.status}")
-                
+
                 data = await resp.json()
                 return data["choices"][0]["message"]["content"]
 
@@ -93,7 +93,7 @@ class AnthropicProvider(AIProvider):
                     error = await resp.text()
                     log.error("anthropic_error", status=resp.status, error=error)
                     raise Exception(f"Anthropic API error: {resp.status}")
-                
+
                 data = await resp.json()
                 return data["content"][0]["text"]
 
@@ -123,7 +123,7 @@ class MarketAIAnalyzer:
             return self._cache[cache_key]
 
         prompt = self._build_analysis_prompt(market, price_history, news_context)
-        
+
         try:
             response = await self.provider.analyze(prompt)
             analysis = self._parse_response(market.condition_id, response)

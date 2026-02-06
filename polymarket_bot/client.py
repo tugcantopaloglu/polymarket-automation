@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -196,10 +197,8 @@ class PolymarketClient:
 
         end_date = None
         if end_str := data.get("end_date_iso") or data.get("endDate"):
-            try:
+            with contextlib.suppress(ValueError):
                 end_date = datetime.fromisoformat(end_str.replace('Z', '+00:00'))
-            except ValueError:
-                pass
 
         return MarketInfo(
             condition_id=condition_id,

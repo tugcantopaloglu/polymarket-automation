@@ -130,10 +130,7 @@ class ValueStrategy(Strategy):
             liquidity_adj = -0.02 if side == "YES" else 0.02
 
         mean_reversion_adj = metrics.mean_reversion_signal * 0.05
-        if side == "YES":
-            mean_reversion_adj = mean_reversion_adj
-        else:
-            mean_reversion_adj = -mean_reversion_adj
+        mean_reversion_adj = mean_reversion_adj if side == "YES" else -mean_reversion_adj
 
         fair_value = (
             base_estimate +

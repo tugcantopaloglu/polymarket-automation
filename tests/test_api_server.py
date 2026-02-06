@@ -1,8 +1,7 @@
-import pytest
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
-from aiohttp.test_utils import AioHTTPTestCase, unittest_run_loop
-from aiohttp import web
+
+import pytest
 
 from polymarket_bot.api.server import APIServer
 
@@ -52,9 +51,9 @@ class TestAPIServer:
             strategy="arbitrage",
             timestamp=datetime.now(UTC)
         )
-        
+
         formatted = api_server._format_trade(mock_trade)
-        
+
         assert formatted["id"] == "123"
         assert formatted["market"] == "Test Market"
         assert formatted["side"] == "BUY"
@@ -72,9 +71,9 @@ class TestAPIServer:
             "strategy": "momentum",
             "timestamp": "2024-01-15T10:00:00"
         }
-        
+
         formatted = api_server._format_trade(trade_dict)
-        
+
         assert formatted["id"] == "456"
         assert formatted["market"] == "Dict Market"
 
@@ -87,9 +86,9 @@ class TestAPIServer:
             severity="info",
             timestamp=datetime.now(UTC)
         )
-        
+
         formatted = api_server._format_alert(mock_alert)
-        
+
         assert formatted["id"] == "789"
         assert formatted["type"] == "arbitrage"
         assert formatted["title"] == "Test Alert"
@@ -104,9 +103,9 @@ class TestAPIServer:
             current_price=0.45,
             unrealized_pnl=5.0
         )
-        
+
         formatted = api_server._format_position(mock_position)
-        
+
         assert formatted["tokenId"] == "token-123"
         assert formatted["size"] == 100.0
         assert formatted["unrealizedPnl"] == 5.0
@@ -124,9 +123,9 @@ class TestAPIServer:
             num_positions=3
         )
         mock_bot.portfolio.get_stats = AsyncMock(return_value=mock_stats)
-        
+
         data = await api_server._get_portfolio_data()
-        
+
         assert data["totalValue"] == 1000.0
         assert data["unrealizedPnl"] == 50.0
         assert data["winRate"] == 0.65
@@ -134,9 +133,9 @@ class TestAPIServer:
     @pytest.mark.asyncio
     async def test_get_portfolio_data_no_bot(self, api_server):
         api_server.bot = None
-        
+
         data = await api_server._get_portfolio_data()
-        
+
         assert data["totalValue"] == 0
         assert data["numPositions"] == 0
 
@@ -148,21 +147,21 @@ class TestAPIServer:
             "enabled": True
         }
         mock_bot.strategies = {"arbitrage": mock_strategy}
-        
+
         with patch('polymarket_bot.api.server.db') as mock_db:
             mock_db.get_strategy_stats.return_value = [{"total_pnl": 100, "win_rate": 0.8}]
-            
+
             data = api_server._get_strategy_data()
-        
+
         assert len(data) == 1
         assert data[0]["name"] == "arbitrage"
         assert data[0]["trades"] == 10
 
     def test_get_strategy_data_no_strategies(self, api_server, mock_bot):
         mock_bot.strategies = {}
-        
+
         data = api_server._get_strategy_data()
-        
+
         assert data == []
 
 
@@ -187,7 +186,7 @@ class TestAPIEndpointsIntegration:
     async def test_health_endpoint(self, api_client):
         resp = await api_client.get("/api/health")
         assert resp.status == 200
-        
+
         data = await resp.json()
         assert data["status"] == "ok"
         assert "timestamp" in data
@@ -196,7 +195,7 @@ class TestAPIEndpointsIntegration:
     async def test_settings_endpoint(self, api_client):
         resp = await api_client.get("/api/settings")
         assert resp.status == 200
-        
+
         data = await resp.json()
         assert "trading" in data
         assert "alerts" in data
@@ -206,7 +205,7 @@ class TestAPIEndpointsIntegration:
     async def test_markets_endpoint_empty(self, api_client):
         resp = await api_client.get("/api/markets")
         assert resp.status == 200
-        
+
         data = await resp.json()
         assert "markets" in data
         assert "count" in data

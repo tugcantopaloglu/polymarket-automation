@@ -216,10 +216,7 @@ class WhaleFollowingStrategy(Strategy):
         size_score = min(1.0, trade.size / 2000)
 
         price = market.yes_token.price if trade.side == "YES" else market.no_token.price
-        if 0.3 <= price <= 0.7:
-            price_score = 1.0
-        else:
-            price_score = 0.5
+        price_score = 1.0 if 0.3 <= price <= 0.7 else 0.5
 
         confidence = (
             pnl_score * 0.25 +
