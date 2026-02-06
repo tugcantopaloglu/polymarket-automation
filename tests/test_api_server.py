@@ -166,21 +166,26 @@ class TestAPIServer:
         assert data == []
 
 
-class TestAPIEndpointsIntegration:
-    @pytest.fixture
-    async def client(self, aiohttp_client):
-        mock_bot = MagicMock()
-        mock_bot._running = True
-        mock_bot._markets_cache = {}
-        mock_bot.portfolio = MagicMock()
-        mock_bot.strategies = {}
-        
-        server = APIServer(bot=mock_bot)
-        return await aiohttp_client(server.app)
+@pytest.fixture
+def mock_bot_for_client():
+    bot = MagicMock()
+    bot._running = True
+    bot._markets_cache = {}
+    bot.portfolio = MagicMock()
+    bot.strategies = {}
+    return bot
 
+
+@pytest.fixture
+async def api_client(aiohttp_client, mock_bot_for_client):
+    server = APIServer(bot=mock_bot_for_client)
+    return await aiohttp_client(server.app)
+
+
+class TestAPIEndpointsIntegration:
     @pytest.mark.asyncio
-    async def test_health_endpoint(self, client):
-        resp = await client.get("/api/health")
+    async def test_health_endpoint(self, api_client):
+        resp = await api_client.get("/api/health")
         assert resp.status == 200
         
         data = await resp.json()
@@ -188,8 +193,8 @@ class TestAPIEndpointsIntegration:
         assert "timestamp" in data
 
     @pytest.mark.asyncio
-    async def test_settings_endpoint(self, client):
-        resp = await client.get("/api/settings")
+    async def test_settings_endpoint(self, api_client):
+        resp = await api_client.get("/api/settings")
         assert resp.status == 200
         
         data = await resp.json()
@@ -198,8 +203,8 @@ class TestAPIEndpointsIntegration:
         assert "rateLimit" in data
 
     @pytest.mark.asyncio
-    async def test_markets_endpoint_empty(self, client):
-        resp = await client.get("/api/markets")
+    async def test_markets_endpoint_empty(self, api_client):
+        resp = await api_client.get("/api/markets")
         assert resp.status == 200
         
         data = await resp.json()

@@ -70,19 +70,19 @@ class TestOpenAIProvider:
             }]
         }
         
-        with patch('aiohttp.ClientSession') as mock_session:
+        with patch('polymarket_bot.ai.analyzer.aiohttp.ClientSession') as mock_session:
             mock_resp = AsyncMock()
             mock_resp.status = 200
             mock_resp.json = AsyncMock(return_value=mock_response)
             
-            mock_ctx = AsyncMock()
-            mock_ctx.__aenter__.return_value = mock_resp
-            mock_ctx.__aexit__.return_value = None
+            mock_post_ctx = AsyncMock()
+            mock_post_ctx.__aenter__ = AsyncMock(return_value=mock_resp)
+            mock_post_ctx.__aexit__ = AsyncMock(return_value=None)
             
-            mock_session_instance = AsyncMock()
-            mock_session_instance.post.return_value = mock_ctx
-            mock_session_instance.__aenter__.return_value = mock_session_instance
-            mock_session_instance.__aexit__.return_value = None
+            mock_session_instance = MagicMock()
+            mock_session_instance.post = MagicMock(return_value=mock_post_ctx)
+            mock_session_instance.__aenter__ = AsyncMock(return_value=mock_session_instance)
+            mock_session_instance.__aexit__ = AsyncMock(return_value=None)
             mock_session.return_value = mock_session_instance
             
             result = await provider.analyze("Test prompt")

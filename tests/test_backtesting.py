@@ -46,9 +46,9 @@ class TestBacktestEngine:
 
             assert isinstance(result, dict)
             assert "strategy" in result
-            assert "initialCapital" in result
-            assert "finalCapital" in result
-            assert "totalReturn" in result
+            assert "initial_capital" in result
+            assert "final_capital" in result
+            assert "total_return" in result
 
     def test_calculate_exposure_empty_positions(self, engine):
         engine.capital = 1000.0
@@ -299,4 +299,4 @@ class TestBacktestTrade:
         )
         trade.pnl = trade.size * (trade.exit_price - trade.entry_price)
         
-        assert trade.pnl == 10.0
+        assert abs(trade.pnl - 10.0) < 0.001
