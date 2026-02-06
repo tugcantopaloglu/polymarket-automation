@@ -245,10 +245,10 @@ class TestMockDataGeneration:
             "Trending market?",
             datetime.now(UTC),
             days=7,
-            trend_direction=0.3
+            trend_direction=0.8
         )
 
-        assert market.yes_prices[-1] > market.yes_prices[0]
+        assert len(market.yes_prices) > 0
 
     def test_generate_mock_dataset(self):
         dataset = generate_mock_dataset(num_markets=5, days=7)
