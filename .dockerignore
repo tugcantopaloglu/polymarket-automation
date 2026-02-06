@@ -11,6 +11,7 @@ __pycache__/
 .keystore.enc
 legacy/
 tests/
-*.md
+CHANGELOG.md
+CONTRIBUTING.md
 .gitignore
 data/
