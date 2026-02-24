@@ -10,7 +10,7 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
 authors = [
-    { name = "Tuğcan Topaloğlu", email = "topaloglutugcan@gmail.com" }
+    { name = "Tuğcan Topaloğlu", email = "tugcan@tugcan.dev" }
 ]
 keywords = ["polymarket", "trading", "prediction-markets", "cryptocurrency", "bot"]
 classifiers = [
