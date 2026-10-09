@@ -99,7 +99,7 @@ class BacktestEngine:
                 continue
             for key in ("yes_price", "no_price"):
                 price = data[key]
-                if not math.isfinite(price) or not 0 < price <= 1:
+                if not math.isfinite(price) or not 0 <= price <= 1:
                     raise ValueError("Snapshot prices must be finite and between zero and one")
             data = {**data, "date": timestamp.isoformat()}
             data_by_date.setdefault(timestamp.date().isoformat(), []).append(data)

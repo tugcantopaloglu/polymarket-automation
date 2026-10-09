@@ -187,6 +187,22 @@ async def test_backtest_constant_downside_returns_are_json_safe():
 
 
 @pytest.mark.asyncio
+async def test_backtest_records_loss_when_outcome_settles_at_zero():
+    engine = BacktestEngine(1000)
+    snapshots = [
+        {"date": "2024-01-01T00:00:00Z", "market_id": "settled-market", "yes_price": 0.35, "no_price": 0.65},
+        {"date": "2024-01-02T00:00:00Z", "market_id": "settled-market", "yes_price": 0.0, "no_price": 1.0},
+    ]
+    with patch.object(engine, "_load_historical_data", new_callable=AsyncMock, return_value=snapshots):
+        result = await engine.run("value", "2024-01-01", "2024-01-02")
+    assert result["final_capital"] == pytest.approx(994.75)
+    assert result["total_trades"] == 1
+    assert result["trades"][0]["exitPrice"] == 0
+    assert result["trades"][0]["pnl"] == pytest.approx(-5.25)
+    json.dumps(result, allow_nan=False)
+
+
+@pytest.mark.asyncio
 async def test_backtest_endpoint_returns_valid_json_for_empty_history(aiohttp_client, tmp_path):
     client = await aiohttp_client(APIServer().app)
     with patch("polymarket_bot.backtesting.engine.db", Database(str(tmp_path / "empty.db"))):
