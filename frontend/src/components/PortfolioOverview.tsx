@@ -28,7 +28,7 @@ export function PortfolioOverview({ portfolio }: Props) {
     {
       label: 'Unrealized P&L',
       value: `$${(portfolio?.unrealizedPnl ?? 0).toFixed(2)}`,
-      icon: portfolio?.unrealizedPnl >= 0 ? TrendingUp : TrendingDown,
+      icon: (portfolio?.unrealizedPnl ?? 0) >= 0 ? TrendingUp : TrendingDown,
       change: portfolio?.unrealizedPnl ?? 0,
       isProfit: (portfolio?.unrealizedPnl ?? 0) >= 0
     },

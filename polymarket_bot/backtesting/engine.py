@@ -328,6 +328,8 @@ class BacktestEngine:
             return None
         avg_return = mean(excess_returns)
         downside_std = stdev(downside_returns) if len(downside_returns) > 1 else 0.001
+        if downside_std == 0:
+            return None
         return (avg_return / downside_std) * (252 ** 0.5)
 
     def _calculate_max_drawdown(self) -> float:

@@ -51,6 +51,8 @@ node_modules/
 .next/
 frontend/.next/
 frontend/node_modules/
+frontend/next-env.d.ts
+*.tsbuildinfo
 
 # Monitoring
 prometheus-data/

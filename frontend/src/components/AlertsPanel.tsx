@@ -5,10 +5,10 @@ import { Bell, TrendingUp, AlertTriangle, DollarSign, Zap } from 'lucide-react'
 
 interface Alert {
   id: string
-  type: 'arbitrage' | 'price_change' | 'volume_spike' | 'risk' | 'trade'
+  type: string
   title: string
   message: string
-  severity: 'info' | 'warning' | 'success' | 'error'
+  severity: string
   timestamp: string
 }
 
@@ -16,7 +16,7 @@ interface Props {
   alerts?: Alert[]
 }
 
-const iconMap = {
+const iconMap: Record<string, typeof Bell> = {
   arbitrage: DollarSign,
   price_change: TrendingUp,
   volume_spike: Zap,
@@ -24,7 +24,7 @@ const iconMap = {
   trade: Bell,
 }
 
-const colorMap = {
+const colorMap: Record<string, string> = {
   info: 'text-blue-400 bg-blue-400/10',
   warning: 'text-yellow-400 bg-yellow-400/10',
   success: 'text-green-400 bg-green-400/10',
@@ -48,9 +48,11 @@ export function AlertsPanel({ alerts = mockAlerts }: Props) {
       
       <div className="space-y-3">
         {alerts.map((alert) => {
-          const Icon = iconMap[alert.type]
+          const Icon = Object.hasOwn(iconMap, alert.type) ? iconMap[alert.type] : Bell
+          const severity = alert.severity.toLowerCase()
+          const color = Object.hasOwn(colorMap, severity) ? colorMap[severity] : colorMap.info
           return (
-            <div key={alert.id} className={`p-3 rounded-lg ${colorMap[alert.severity]}`}>
+            <div key={alert.id} className={`p-3 rounded-lg ${color}`}>
               <div className="flex items-start gap-3">
                 <Icon className="w-5 h-5 mt-0.5" />
                 <div className="flex-1">

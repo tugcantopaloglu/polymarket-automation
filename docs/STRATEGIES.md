@@ -46,7 +46,7 @@ The Kelly calculation uses `(b * probability - (1 - probability)) / b`, clamped 
 - Value uses a fixed 0.5 reference price with simple entry/exit thresholds, not the scanner's fair-value or Kelly model.
 - Momentum has no entry rule and therefore creates no positions.
 
-Backtest size means shares. The engine prevents repeated signals from overwriting an existing market/outcome position, uses only that position's market data for exit checks, marks daily equity at observed prices, and closes each position at its own final observation. Daily return statistics use consecutive equity changes with a 252-period annualization convention. No real-world performance claims follow from this convention or the synthetic regression fixture.
+Backtest size means shares. The engine prevents repeated signals from overwriting an existing market/outcome position, uses only that position's market data for exit checks, marks daily equity at observed prices, and closes each position at its own final observation. Daily return statistics use consecutive equity changes with a 252-period annualization convention. The simplified Sortino implementation uses the sample deviation of negative returns, with a 0.001 fallback for one negative observation. With at least two return observations, absent or zero downside deviation returns `null`; shorter histories return zero. This differs from a Sortino calculation based on downside root mean square. No real-world performance claims follow from this convention or the synthetic regression fixture.
 
 ## Counters and state
 

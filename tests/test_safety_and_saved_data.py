@@ -171,6 +171,22 @@ async def test_backtest_never_exits_a_position_using_another_market():
 
 
 @pytest.mark.asyncio
+async def test_backtest_constant_downside_returns_are_json_safe():
+    engine = BacktestEngine(20)
+    prices = [0.35, (19.6875 - 14.75) / 15, (19.3798828125 - 14.75) / 15]
+    snapshots = [
+        {"date": f"2024-01-0{day}T00:00:00Z", "market_id": "saved-market", "yes_price": price, "no_price": 1 - price}
+        for day, price in enumerate(prices, start=1)
+    ]
+    with patch.object(engine, "_load_historical_data", new_callable=AsyncMock, return_value=snapshots):
+        result = await engine.run("value", "2024-01-01", "2024-01-03")
+    assert result["final_capital"] == pytest.approx(19.3798828125)
+    assert [point["value"] for point in result["equity_curve"]] == pytest.approx([20, 19.6875, 19.3798828125])
+    assert result["sortino_ratio"] is None
+    json.dumps(result, allow_nan=False)
+
+
+@pytest.mark.asyncio
 async def test_backtest_endpoint_returns_valid_json_for_empty_history(aiohttp_client, tmp_path):
     client = await aiohttp_client(APIServer().app)
     with patch("polymarket_bot.backtesting.engine.db", Database(str(tmp_path / "empty.db"))):
