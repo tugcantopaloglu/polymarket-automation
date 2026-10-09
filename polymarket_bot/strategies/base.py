@@ -80,6 +80,9 @@ class Strategy(ABC):
         return result.is_actionable
 
     async def execute(self, result: StrategyResult) -> bool:
+        if result.side.upper() not in ("YES", "NO"):
+            log.warning("unsupported_position_side", strategy=self.name, side=result.side)
+            return False
         if not self.should_execute(result):
             return False
 

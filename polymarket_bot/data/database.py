@@ -166,7 +166,7 @@ class Database:
             rows = conn.execute("""
                 SELECT * FROM price_history
                 WHERE token_id = ?
-                AND timestamp >= datetime('now', ?)
+                AND julianday(timestamp) >= julianday('now', ?)
                 ORDER BY timestamp DESC
                 LIMIT ?
             """, (token_id, f'-{hours} hours', limit)).fetchall()
@@ -213,14 +213,14 @@ class Database:
                 rows = conn.execute("""
                     SELECT * FROM trades
                     WHERE strategy = ?
-                    AND timestamp >= datetime('now', ?)
+                    AND julianday(timestamp) >= julianday('now', ?)
                     ORDER BY timestamp DESC
                     LIMIT ?
                 """, (strategy, f'-{hours} hours', limit)).fetchall()
             else:
                 rows = conn.execute("""
                     SELECT * FROM trades
-                    WHERE timestamp >= datetime('now', ?)
+                    WHERE julianday(timestamp) >= julianday('now', ?)
                     ORDER BY timestamp DESC
                     LIMIT ?
                 """, (f'-{hours} hours', limit)).fetchall()
@@ -315,6 +315,16 @@ class Database:
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (market_id, question, yes_price, no_price, volume_24h, liquidity, timestamp))
 
+    def get_market_snapshots(self, start_date: str, end_date: str) -> list[dict]:
+        with self._get_conn() as conn:
+            rows = conn.execute("""
+                SELECT * FROM market_snapshots
+                WHERE julianday(timestamp) >= julianday(?)
+                AND julianday(timestamp) <= julianday(?)
+                ORDER BY julianday(timestamp), id
+            """, (start_date, end_date)).fetchall()
+        return [dict(row) for row in rows]
+
     def update_strategy_performance(
         self,
         strategy: str,
@@ -361,12 +371,12 @@ class Database:
         with self._get_conn() as conn:
             conn.execute("""
                 DELETE FROM price_history
-                WHERE timestamp < datetime('now', ?)
+                WHERE julianday(timestamp) < julianday('now', ?)
             """, (f'-{days} days',))
 
             conn.execute("""
                 DELETE FROM market_snapshots
-                WHERE timestamp < datetime('now', ?)
+                WHERE julianday(timestamp) < julianday('now', ?)
             """, (f'-{days} days',))
 
             deleted = conn.total_changes

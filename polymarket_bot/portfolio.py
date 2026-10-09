@@ -241,6 +241,10 @@ class PortfolioManager:
         price: float,
         strategy: str
     ) -> bool:
+        if side.upper() not in ("YES", "NO"):
+            return False
+        if not math.isfinite(size) or size <= 0 or not math.isfinite(price) or not 0 < price < 1:
+            return False
         limits = self.get_risk_limits()
         if not limits.can_trade:
             log.warning("trade_blocked", reason=limits.blocked_reason)

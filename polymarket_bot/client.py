@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import math
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -68,8 +69,15 @@ class OrderBook:
 
     @classmethod
     def from_raw(cls, book: dict) -> 'OrderBook':
-        bids = book.get("bids", [])
-        asks = book.get("asks", [])
+        bids = sorted(book.get("bids", []), key=lambda level: float(level["price"]), reverse=True)
+        asks = sorted(book.get("asks", []), key=lambda level: float(level["price"]))
+
+        for level in bids + asks:
+            price, size = float(level["price"]), float(level["size"])
+            if not math.isfinite(price) or not 0 <= price <= 1:
+                raise ValueError("Order book prices must be finite and between zero and one")
+            if not math.isfinite(size) or size < 0:
+                raise ValueError("Order book sizes must be finite and nonnegative")
 
         best_bid = float(bids[0]["price"]) if bids else 0
         best_ask = float(asks[0]["price"]) if asks else 1
@@ -103,9 +111,16 @@ class Position:
     timestamp: datetime
 
 class PolymarketClient:
-    def __init__(self, private_key: str | None = None, funder: str | None = None):
-        self.private_key = private_key or keystore.load_private_key()
-        self.funder = funder
+    def __init__(
+        self,
+        private_key: str | None = None,
+        funder: str | None = None,
+        *,
+        read_only: bool = False,
+    ):
+        self.read_only = read_only
+        self.private_key = None if read_only else private_key or keystore.load_private_key()
+        self.funder = None if read_only else funder
         self._clob: ClobClient | None = None
         self._session: aiohttp.ClientSession | None = None
         self._rate_limiter = RateLimiter(
@@ -131,7 +146,7 @@ class PolymarketClient:
     @property
     def clob(self) -> ClobClient:
         if self._clob is None:
-            if self.private_key:
+            if self.private_key and not self.read_only:
                 self._clob = ClobClient(
                     config.host,
                     key=self.private_key,
@@ -249,6 +264,7 @@ class PolymarketClient:
             return None
 
     def place_market_order(self, token_id: str, amount: float, side: str) -> dict:
+        self._validate_order(side, amount)
         metrics.increment("orders_placed", tags={"type": "market", "side": side})
         order_side = BUY if side.upper() == "BUY" else SELL
         order = MarketOrderArgs(
@@ -264,6 +280,9 @@ class PolymarketClient:
         return result
 
     def place_limit_order(self, token_id: str, price: float, size: float, side: str) -> dict:
+        self._validate_order(side, size)
+        if isinstance(price, bool) or not math.isfinite(price) or not 0 < price < 1:
+            raise ValueError("Order price must be finite and between zero and one")
         metrics.increment("orders_placed", tags={"type": "limit", "side": side})
         order_side = BUY if side.upper() == "BUY" else SELL
         order = OrderArgs(
@@ -276,6 +295,7 @@ class PolymarketClient:
         return self.clob.post_order(signed, OrderType.GTC)
 
     def cancel_order(self, order_id: str) -> bool:
+        self._require_writable()
         try:
             self.clob.cancel(order_id)
             return True
@@ -283,6 +303,7 @@ class PolymarketClient:
             return False
 
     def cancel_all_orders(self) -> bool:
+        self._require_writable()
         try:
             self.clob.cancel_all()
             return True
@@ -290,6 +311,8 @@ class PolymarketClient:
             return False
 
     def get_balance(self) -> float:
+        if self.read_only:
+            return 0.0
         try:
             bal = self.clob.get_balance_allowance()
             balance = float(bal.get("balance", 0)) if bal else 0
@@ -297,6 +320,17 @@ class PolymarketClient:
             return balance
         except Exception:
             return 0
+
+    def _require_writable(self):
+        if self.read_only:
+            raise PermissionError("Wallet operations are disabled for a read-only client")
+
+    def _validate_order(self, side: str, amount: float):
+        self._require_writable()
+        if not isinstance(side, str) or side.upper() not in ("BUY", "SELL"):
+            raise ValueError("Order side must be BUY or SELL")
+        if isinstance(amount, bool) or not math.isfinite(amount) or amount <= 0:
+            raise ValueError("Order amount must be finite and positive")
 
     def get_positions(self) -> list[Position]:
         try:

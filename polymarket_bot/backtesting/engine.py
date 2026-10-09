@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from statistics import mean, stdev
@@ -34,10 +35,10 @@ class BacktestResult:
     winning_trades: int
     losing_trades: int
     win_rate: float
-    profit_factor: float
+    profit_factor: float | None
     max_drawdown: float
     sharpe_ratio: float
-    sortino_ratio: float
+    sortino_ratio: float | None
     avg_trade_pnl: float
     avg_winner: float
     avg_loser: float
@@ -53,11 +54,16 @@ class StrategyProtocol(Protocol):
 
 class BacktestEngine:
     def __init__(self, initial_capital: float = 1000.0):
+        if isinstance(initial_capital, bool) or not isinstance(initial_capital, (int, float)):
+            raise ValueError("Initial capital must be a finite positive number")
+        if not math.isfinite(initial_capital) or initial_capital <= 0:
+            raise ValueError("Initial capital must be a finite positive number")
         self.initial_capital = initial_capital
         self.capital = initial_capital
         self.positions: dict[str, BacktestTrade] = {}
         self.closed_trades: list[BacktestTrade] = []
         self.equity_curve: list[dict] = []
+        self._last_market_data: dict[str, dict] = {}
 
     async def run(
         self,
@@ -70,23 +76,45 @@ class BacktestEngine:
         self.positions = {}
         self.closed_trades = []
         self.equity_curve = []
+        self._last_market_data = {}
 
         end = datetime.fromisoformat(end_date) if end_date else datetime.now(UTC)
         start = datetime.fromisoformat(start_date) if start_date else end - timedelta(days=30)
+        start = start.replace(tzinfo=UTC) if start.tzinfo is None else start.astimezone(UTC)
+        end = end.replace(tzinfo=UTC) if end.tzinfo is None else end.astimezone(UTC)
+        if end < start:
+            raise ValueError("End date must not precede start date")
+        if end - start > timedelta(days=3660):
+            raise ValueError("Backtest range must not exceed 3660 days")
 
         strategy_impl = self._get_strategy(strategy)
 
         historical_data = await self._load_historical_data(start, end, markets)
 
-        current_date = start
+        data_by_date: dict[str, list[dict]] = {}
+        for data in historical_data:
+            timestamp = datetime.fromisoformat(data["date"])
+            timestamp = timestamp.replace(tzinfo=UTC) if timestamp.tzinfo is None else timestamp.astimezone(UTC)
+            if not start <= timestamp <= end:
+                continue
+            for key in ("yes_price", "no_price"):
+                price = data[key]
+                if not math.isfinite(price) or not 0 < price <= 1:
+                    raise ValueError("Snapshot prices must be finite and between zero and one")
+            data = {**data, "date": timestamp.isoformat()}
+            data_by_date.setdefault(timestamp.date().isoformat(), []).append(data)
+        for day_data in data_by_date.values():
+            day_data.sort(key=lambda data: data["date"])
+
+        current_date = start.replace(hour=0, minute=0, second=0, microsecond=0)
         while current_date <= end:
-            day_data = [d for d in historical_data if d.get("date", "").startswith(current_date.strftime("%Y-%m-%d"))]
+            day_data = data_by_date.get(current_date.date().isoformat(), [])
 
             for market_data in day_data:
                 self._update_positions(market_data)
 
                 for pos_id, position in list(self.positions.items()):
-                    if strategy_impl.should_exit(position.__dict__, market_data):
+                    if position.market_id == market_data["market_id"] and strategy_impl.should_exit(position.__dict__, market_data):
                         self._close_position(pos_id, market_data)
 
                 portfolio_state = {
@@ -96,7 +124,8 @@ class BacktestEngine:
                 }
 
                 should_enter, side, size = strategy_impl.should_enter(market_data, portfolio_state)
-                if should_enter and self._can_open_position(size):
+                price = market_data.get("yes_price" if side == "YES" else "no_price", 0.5)
+                if should_enter and self._can_open_position(size, price):
                     self._open_position(market_data, side, size, strategy)
 
             self.equity_curve.append({
@@ -108,7 +137,12 @@ class BacktestEngine:
             current_date += timedelta(days=1)
 
         for pos_id in list(self.positions.keys()):
-            self._close_position(pos_id, historical_data[-1] if historical_data else {})
+            market_id = self.positions[pos_id].market_id
+            self._close_position(pos_id, self._last_market_data.get(market_id, {}))
+
+        if self.equity_curve:
+            self.equity_curve[-1]["value"] = self._calculate_portfolio_value()
+            self.equity_curve[-1]["pnl"] = self._calculate_portfolio_value() - self.initial_capital
 
         return self._generate_result(strategy, start.isoformat(), end.isoformat())
 
@@ -119,7 +153,9 @@ class BacktestEngine:
             "momentum": MomentumBacktestStrategy(),
             "value": ValueBacktestStrategy(),
         }
-        return strategies.get(strategy_name, ArbitrageBacktestStrategy())
+        if strategy_name not in strategies:
+            raise ValueError(f"Unknown backtest strategy: {strategy_name}")
+        return strategies[strategy_name]
 
     async def _load_historical_data(
         self,
@@ -134,18 +170,21 @@ class BacktestEngine:
         return [
             {
                 "date": s.timestamp.isoformat() if hasattr(s, 'timestamp') else s.get('timestamp', ''),
-                "market_id": s.condition_id if hasattr(s, 'condition_id') else s.get('condition_id', ''),
+                "market_id": s.condition_id if hasattr(s, 'condition_id') else s.get('market_id', ''),
                 "market_name": s.question if hasattr(s, 'question') else s.get('question', ''),
                 "yes_price": s.yes_price if hasattr(s, 'yes_price') else s.get('yes_price', 0.5),
                 "no_price": s.no_price if hasattr(s, 'no_price') else s.get('no_price', 0.5),
-                "volume": s.volume if hasattr(s, 'volume') else s.get('volume', 0),
+                "volume": s.volume if hasattr(s, 'volume') else s.get('volume_24h', 0),
                 "liquidity": s.liquidity if hasattr(s, 'liquidity') else s.get('liquidity', 0)
             }
             for s in snapshots
-            if not markets or (s.condition_id if hasattr(s, 'condition_id') else s.get('condition_id', '')) in markets
+            if not markets or (s.condition_id if hasattr(s, 'condition_id') else s.get('market_id', '')) in markets
         ]
 
     def _open_position(self, market_data: dict, side: str, size: float, strategy: str):
+        position_id = f"{market_data.get('market_id')}_{side}"
+        if position_id in self.positions:
+            return
         price = market_data.get("yes_price" if side == "YES" else "no_price", 0.5)
         cost = size * price
 
@@ -164,7 +203,7 @@ class BacktestEngine:
             strategy=strategy
         )
 
-        self.positions[f"{market_data.get('market_id')}_{side}"] = trade
+        self.positions[position_id] = trade
         self.capital -= cost
 
     def _close_position(self, position_id: str, market_data: dict):
@@ -182,20 +221,29 @@ class BacktestEngine:
         self.closed_trades.append(position)
 
     def _update_positions(self, market_data: dict):
-        for _pos_id, position in self.positions.items():
-            if market_data.get("market_id") == position.market_id:
-                pass
+        self._last_market_data[market_data["market_id"]] = market_data
 
-    def _can_open_position(self, size: float) -> bool:
-        return self.capital >= size * 0.1 and self._calculate_exposure() < 0.8
+    def _can_open_position(self, size: float, price: float = 0.5) -> bool:
+        cost = size * price
+        total_value = self._calculate_portfolio_value()
+        return (
+            math.isfinite(cost) and cost > 0 and self.capital >= cost
+            and total_value > 0
+            and (total_value - self.capital + cost) / total_value <= 0.8
+        )
+
+    def _position_value(self, position: BacktestTrade) -> float:
+        data = self._last_market_data.get(position.market_id, {})
+        price = data.get(f"{position.outcome.lower()}_price", position.entry_price)
+        return position.size * price
 
     def _calculate_exposure(self) -> float:
-        position_value = sum(p.size * p.entry_price for p in self.positions.values())
+        position_value = sum(self._position_value(p) for p in self.positions.values())
         total_value = self.capital + position_value
         return position_value / total_value if total_value > 0 else 0
 
     def _calculate_portfolio_value(self) -> float:
-        position_value = sum(p.size * p.entry_price for p in self.positions.values())
+        position_value = sum(self._position_value(p) for p in self.positions.values())
         return self.capital + position_value
 
     def _generate_result(self, strategy: str, start_date: str, end_date: str) -> dict:
@@ -209,9 +257,14 @@ class BacktestEngine:
 
         gross_profit = sum(t.pnl for t in winners)
         gross_loss = abs(sum(t.pnl for t in losers))
-        profit_factor = gross_profit / gross_loss if gross_loss > 0 else float('inf')
+        profit_factor = gross_profit / gross_loss if gross_loss > 0 else None
 
-        returns = [e.get("pnl", 0) / self.initial_capital for e in self.equity_curve if e.get("pnl")]
+        values = [self.initial_capital, *(point["value"] for point in self.equity_curve)]
+        returns = [
+            current / previous - 1
+            for previous, current in zip(values, values[1:], strict=False)
+            if previous > 0
+        ]
         sharpe_ratio = self._calculate_sharpe(returns)
         sortino_ratio = self._calculate_sortino(returns)
         max_drawdown = self._calculate_max_drawdown()
@@ -266,13 +319,13 @@ class BacktestEngine:
         std_return = stdev(excess_returns)
         return (avg_return / std_return) * (252 ** 0.5) if std_return > 0 else 0
 
-    def _calculate_sortino(self, returns: list[float], risk_free: float = 0.0) -> float:
+    def _calculate_sortino(self, returns: list[float], risk_free: float = 0.0) -> float | None:
         if not returns or len(returns) < 2:
             return 0.0
         excess_returns = [r - risk_free / 252 for r in returns]
         downside_returns = [r for r in excess_returns if r < 0]
         if not downside_returns:
-            return float('inf')
+            return None
         avg_return = mean(excess_returns)
         downside_std = stdev(downside_returns) if len(downside_returns) > 1 else 0.001
         return (avg_return / downside_std) * (252 ** 0.5)

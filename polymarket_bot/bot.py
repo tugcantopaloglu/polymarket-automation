@@ -61,7 +61,7 @@ class PolymarketBot:
         else:
             pk = None
 
-        async with PolymarketClient(pk, self.funder) as client:
+        async with PolymarketClient(pk, self.funder, read_only=self.dry_run) as client:
             self.client = client
             self.portfolio = PortfolioManager(client)
 
@@ -273,7 +273,7 @@ async def monitor_mode():
     setup_logging(config.log_level)
     log.info("monitor_mode", msg="Scanning without trading (no wallet)")
 
-    async with PolymarketClient() as client:
+    async with PolymarketClient(read_only=True) as client:
         portfolio = PortfolioManager(client)
 
         strategies = [

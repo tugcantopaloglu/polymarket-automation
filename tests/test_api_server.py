@@ -21,7 +21,7 @@ class TestAPIServer:
         return APIServer(bot=mock_bot, port=8081)
 
     def test_server_initialization(self, api_server):
-        assert api_server.host == "0.0.0.0"
+        assert api_server.host == "127.0.0.1"
         assert api_server.port == 8081
         assert api_server.app is not None
 

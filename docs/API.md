@@ -1,470 +1,55 @@
-# API Documentation
+# API implementation notes
 
-The Polymarket Bot includes a REST API for monitoring, control, and integration with external systems.
+`polymarket_bot.api.server.APIServer` defines an aiohttp API. Its constructor defaults to `127.0.0.1:8080`, and `start()` binds it. The bot CLI does not instantiate or start it, so the provided Docker health check and frontend need additional integration.
 
-## Base URL
+There is no authentication, CORS policy, or inbound rate limiting. Loopback binding alone does not protect an API exposed through the frontend proxy. Do not expose this API until an authenticated boundary is implemented. Settings changes affect the running process and are not persisted.
 
-```
-http://localhost:8080/api
-```
+## Routes
 
-## Authentication
+| Route | Current behavior |
+| --- | --- |
+| `GET /api/health` | Returns status, UTC timestamp, and `bot_running` |
+| `GET /api/settings` | Returns trading parameters and notification-enabled booleans; does not return notification secrets |
+| `PUT /api/settings` | Validates and atomically replaces trading settings; invalid input returns 400 |
+| `GET /api/markets` | Returns up to 100 cached markets, or an empty list without an attached bot |
+| `GET /api/strategies` | Returns strategy counters and database rows; the dashboard's P&L/win-rate field mapping remains incomplete |
+| `POST /api/backtest` | Runs a saved-data backtest and returns the engine result; invalid parameters return 400 |
+| `GET /api/stream` | Sends portfolio/status updates every five seconds; uses local portfolio bookkeeping |
+| `GET /api/dashboard` | Incomplete: calls absent recent-trade, recent-alert, and portfolio-snapshot database methods |
+| `GET /api/portfolio` | Incomplete: calls absent `Database.get_positions` |
+| `GET /api/trades` | Incomplete: pagination/count APIs do not match `Database.get_trades` |
+| `GET /api/alerts` | Incomplete: calls absent `Database.get_recent_alerts` |
 
-Currently, the API does not require authentication. For production deployments, configure a reverse proxy (nginx/traefik) with authentication.
+These routes do not submit, cancel, or reconcile orders. There is no WebSocket endpoint. The frontend dashboard cannot be considered operational from route registration or frontend compilation alone.
 
----
+## Settings
 
-## Endpoints
-
-### Health Check
-
-```http
-GET /api/health
-```
-
-**Response:**
-```json
-{
-  "status": "ok",
-  "timestamp": "2024-01-15T10:30:00Z",
-  "bot_running": true
-}
-```
-
----
-
-### Dashboard
-
-Get aggregated dashboard data.
-
-```http
-GET /api/dashboard
-```
-
-**Response:**
-```json
-{
-  "status": "running",
-  "portfolio": {
-    "totalValue": 1250.50,
-    "unrealizedPnl": 45.20,
-    "realizedPnlToday": 12.30,
-    "winRate": 0.68,
-    "exposure": 0.35,
-    "maxDrawdown": 0.08,
-    "sharpeRatio": 1.45,
-    "numPositions": 5
-  },
-  "performance": [
-    {"date": "2024-01-14", "value": 1200, "pnl": -5.50},
-    {"date": "2024-01-15", "value": 1250.50, "pnl": 50.50}
-  ],
-  "strategies": [
-    {
-      "name": "arbitrage",
-      "trades": 45,
-      "winRate": 0.92,
-      "pnl": 125.50,
-      "opportunities": 156,
-      "enabled": true
-    }
-  ],
-  "trades": [...],
-  "alerts": [...],
-  "opportunities": [...]
-}
-```
-
----
-
-### Portfolio
-
-Get detailed portfolio information.
-
-```http
-GET /api/portfolio
-```
-
-**Response:**
-```json
-{
-  "totalValue": 1250.50,
-  "unrealizedPnl": 45.20,
-  "realizedPnlToday": 12.30,
-  "winRate": 0.68,
-  "exposure": 0.35,
-  "maxDrawdown": 0.08,
-  "sharpeRatio": 1.45,
-  "numPositions": 5,
-  "positions": [
-    {
-      "tokenId": "abc123...",
-      "marketId": "def456...",
-      "outcome": "YES",
-      "size": 50.0,
-      "entryPrice": 0.45,
-      "currentPrice": 0.52,
-      "unrealizedPnl": 3.50
-    }
-  ]
-}
-```
-
----
-
-### Trades
-
-Get trade history.
-
-```http
-GET /api/trades?limit=50&offset=0&strategy=arbitrage
-```
-
-**Parameters:**
-| Name | Type | Description |
-|------|------|-------------|
-| `limit` | integer | Number of trades (default: 50, max: 200) |
-| `offset` | integer | Pagination offset (default: 0) |
-| `strategy` | string | Filter by strategy name |
-
-**Response:**
-```json
-{
-  "trades": [
-    {
-      "id": "trade_123",
-      "market": "Will BTC hit $100k?",
-      "side": "BUY",
-      "outcome": "YES",
-      "size": 25.0,
-      "price": 0.45,
-      "pnl": 5.20,
-      "strategy": "momentum",
-      "timestamp": "2024-01-15T10:30:00Z"
-    }
-  ],
-  "total": 245,
-  "limit": 50,
-  "offset": 0
-}
-```
-
----
-
-### Markets
-
-Get cached market data.
-
-```http
-GET /api/markets
-```
-
-**Response:**
-```json
-{
-  "markets": [
-    {
-      "conditionId": "abc123...",
-      "question": "Will BTC exceed $100,000?",
-      "yesPrice": 0.45,
-      "noPrice": 0.54,
-      "volume24h": 125000,
-      "liquidity": 50000,
-      "spread": 0.01,
-      "category": "Crypto",
-      "endDate": "2024-12-31T00:00:00Z"
-    }
-  ],
-  "count": 150
-}
-```
-
----
-
-### Alerts
-
-Get recent alerts.
-
-```http
-GET /api/alerts?limit=20
-```
-
-**Response:**
-```json
-{
-  "alerts": [
-    {
-      "id": "alert_123",
-      "type": "arbitrage",
-      "title": "Arbitrage Found",
-      "message": "5.2% margin on BTC market",
-      "severity": "success",
-      "timestamp": "2024-01-15T10:30:00Z"
-    }
-  ]
-}
-```
-
----
-
-### Strategies
-
-Get strategy performance data.
-
-```http
-GET /api/strategies
-```
-
-**Response:**
-```json
-{
-  "strategies": [
-    {
-      "name": "arbitrage",
-      "trades": 45,
-      "winRate": 0.92,
-      "pnl": 125.50,
-      "opportunities": 156,
-      "enabled": true
-    }
-  ],
-  "stats": [
-    {
-      "strategy": "arbitrage",
-      "date": "2024-01-15",
-      "trades": 5,
-      "pnl": 12.30,
-      "win_rate": 1.0
-    }
-  ]
-}
-```
-
----
-
-### Backtest
-
-Run a strategy backtest.
-
-```http
-POST /api/backtest
-Content-Type: application/json
-
-{
-  "strategy": "arbitrage",
-  "startDate": "2024-01-01",
-  "endDate": "2024-01-15",
-  "initialCapital": 1000
-}
-```
-
-**Response:**
-```json
-{
-  "strategy": "arbitrage",
-  "startDate": "2024-01-01",
-  "endDate": "2024-01-15",
-  "initialCapital": 1000,
-  "finalCapital": 1125.50,
-  "totalReturn": 0.1255,
-  "totalTrades": 45,
-  "winningTrades": 42,
-  "losingTrades": 3,
-  "winRate": 0.933,
-  "profitFactor": 8.5,
-  "maxDrawdown": 0.025,
-  "sharpeRatio": 2.8,
-  "sortinoRatio": 4.2,
-  "avgTradePnl": 2.79,
-  "avgWinner": 3.05,
-  "avgLoser": -1.20,
-  "largestWinner": 12.50,
-  "largestLoser": -2.10,
-  "avgHoldingPeriod": 2.5,
-  "trades": [...],
-  "equityCurve": [...]
-}
-```
-
----
-
-### Real-time Stream
-
-Server-Sent Events (SSE) stream for real-time updates.
-
-```http
-GET /api/stream
-```
-
-**Event Format:**
-```
-data: {"type":"update","timestamp":"2024-01-15T10:30:00Z","portfolio":{...},"status":"running"}
-
-data: {"type":"update","timestamp":"2024-01-15T10:30:05Z","portfolio":{...},"status":"running"}
-```
-
-**JavaScript Example:**
-```javascript
-const eventSource = new EventSource('/api/stream');
-
-eventSource.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  console.log('Update:', data);
-};
-```
-
----
-
-### Settings
-
-Get current configuration.
-
-```http
-GET /api/settings
-```
-
-**Response:**
-```json
-{
-  "trading": {
-    "minProfitMargin": 0.02,
-    "maxPositionUsd": 50,
-    "maxDailyLossUsd": 20,
-    "minLiquidityUsd": 100,
-    "kellyFraction": 0.25,
-    "stopLossPct": 0.15,
-    "takeProfitPct": 0.30
-  },
-  "alerts": {
-    "priceChangeThreshold": 0.05,
-    "volumeSpikeThreshold": 3.0,
-    "telegramEnabled": true,
-    "discordEnabled": false
-  },
-  "rateLimit": {
-    "requestsPerSecond": 5.0,
-    "burstLimit": 20
-  }
-}
-```
-
-Update settings (partial update supported):
+Example request:
 
 ```http
 PUT /api/settings
 Content-Type: application/json
 
-{
-  "trading": {
-    "maxPositionUsd": 75,
-    "stopLossPct": 0.20
-  }
-}
+{"trading":{"maxPositionUsd":50,"stopLossPct":0.15}}
 ```
 
----
+The top-level object must contain only `trading`, whose value must be an object. Partial updates are supported for `TradingConfig` fields, using camelCase names. Unknown fields, strings, booleans, non-finite values, and negative limits are rejected. Margin, slippage, portfolio exposure, Kelly fraction, and stop-loss fraction must not exceed one. Take-profit fraction can exceed one because it represents a relative price increase. Position and daily-loss limits must be positive; cooldown seconds must be an integer. Validation completes before any field changes.
 
-## Error Handling
+Success response is `{"status":"updated"}`. A failed update leaves the previous configuration intact. Existing strategy constructor parameters are not automatically recreated when global settings change.
 
-All endpoints return standard error responses:
+## Backtest
 
-```json
-{
-  "error": "Description of the error"
-}
+Example request:
+
+```http
+POST /api/backtest
+Content-Type: application/json
+
+{"strategy":"value","startDate":"2024-01-01","endDate":"2024-01-04","initialCapital":1000}
 ```
 
-HTTP Status Codes:
-- `200` - Success
-- `400` - Bad Request (invalid parameters)
-- `404` - Not Found
-- `500` - Internal Server Error
+Supported names are `arbitrage`, `bonding`, `momentum`, and `value`. Dates are ISO 8601, interpreted as UTC when no offset is present, and include both range endpoints. Omitted end date defaults to now; omitted start date defaults to 30 days earlier. Starting capital must be finite and positive, and the range must be ordered and no longer than 3660 days.
 
----
+The response uses **snake_case** engine keys such as `initial_capital`, `final_capital`, `total_return`, `total_trades`, `win_rate`, `profit_factor`, `sortino_ratio`, and `equity_curve`. Individual trade objects use `entryPrice` and `exitPrice`. Undefined profit factor and Sortino ratio are `null`, keeping the response valid JSON. The frontend backtest page uses those fields and displays undefined ratios as `N/A`.
 
-## Rate Limiting
-
-The API itself does not implement rate limiting, but the underlying Polymarket client does:
-- 5 requests/second to Polymarket API
-- Burst limit of 20 requests
-- Circuit breaker opens after 5 consecutive failures
-
----
-
-## WebSocket (Future)
-
-WebSocket support for bidirectional communication is planned for v2.1:
-
-```javascript
-const ws = new WebSocket('ws://localhost:8080/ws');
-
-ws.onopen = () => {
-  ws.send(JSON.stringify({ type: 'subscribe', channels: ['portfolio', 'trades'] }));
-};
-
-ws.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  // Handle real-time updates
-};
-```
-
----
-
-## Integration Examples
-
-### Python
-
-```python
-import requests
-
-BASE_URL = "http://localhost:8080/api"
-
-# Get dashboard data
-response = requests.get(f"{BASE_URL}/dashboard")
-data = response.json()
-print(f"Portfolio Value: ${data['portfolio']['totalValue']}")
-
-# Run backtest
-backtest_params = {
-    "strategy": "arbitrage",
-    "startDate": "2024-01-01",
-    "endDate": "2024-01-15",
-    "initialCapital": 1000
-}
-response = requests.post(f"{BASE_URL}/backtest", json=backtest_params)
-result = response.json()
-print(f"Return: {result['totalReturn']:.2%}")
-```
-
-### cURL
-
-```bash
-# Health check
-curl http://localhost:8080/api/health
-
-# Get trades
-curl "http://localhost:8080/api/trades?limit=10"
-
-# Run backtest
-curl -X POST http://localhost:8080/api/backtest \
-  -H "Content-Type: application/json" \
-  -d '{"strategy":"arbitrage","initialCapital":1000}'
-```
-
-### JavaScript/Node.js
-
-```javascript
-const axios = require('axios');
-
-const api = axios.create({
-  baseURL: 'http://localhost:8080/api'
-});
-
-async function getDashboard() {
-  const { data } = await api.get('/dashboard');
-  console.log(`Running: ${data.status}`);
-  console.log(`Value: $${data.portfolio.totalValue}`);
-}
-
-getDashboard();
-```
+Snapshots come from local SQLite `market_snapshots`; no history is downloaded by this endpoint. An empty database returns no trades and unchanged capital. See [strategy notes](STRATEGIES.md) for the simplified rules and omitted execution assumptions.

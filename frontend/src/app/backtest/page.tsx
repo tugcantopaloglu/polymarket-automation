@@ -6,26 +6,26 @@ import { Play, TrendingUp, TrendingDown, Target, BarChart2 } from 'lucide-react'
 
 interface BacktestResult {
   strategy: string
-  startDate: string
-  endDate: string
-  initialCapital: number
-  finalCapital: number
-  totalReturn: number
-  totalTrades: number
-  winningTrades: number
-  losingTrades: number
-  winRate: number
-  profitFactor: number
-  maxDrawdown: number
-  sharpeRatio: number
-  sortinoRatio: number
-  avgTradePnl: number
-  avgWinner: number
-  avgLoser: number
-  largestWinner: number
-  largestLoser: number
-  avgHoldingPeriod: number
-  equityCurve: Array<{ date: string; value: number; pnl: number }>
+  start_date: string
+  end_date: string
+  initial_capital: number
+  final_capital: number
+  total_return: number
+  total_trades: number
+  winning_trades: number
+  losing_trades: number
+  win_rate: number
+  profit_factor: number | null
+  max_drawdown: number
+  sharpe_ratio: number
+  sortino_ratio: number | null
+  avg_trade_pnl: number
+  avg_winner: number
+  avg_loser: number
+  largest_winner: number
+  largest_loser: number
+  avg_holding_period: number
+  equity_curve: Array<{ date: string; value: number; pnl: number }>
   trades: Array<{
     timestamp: string
     market: string
@@ -39,10 +39,10 @@ interface BacktestResult {
 }
 
 const strategies = [
-  { id: 'arbitrage', name: 'Arbitrage', description: 'Exploits Yes + No < 1.0 opportunities' },
-  { id: 'bonding', name: 'Bonding', description: 'High probability near resolution' },
-  { id: 'momentum', name: 'Momentum', description: 'Follows price trends' },
-  { id: 'value', name: 'Value', description: 'Kelly criterion-based positioning' },
+  { id: 'arbitrage', name: 'Arbitrage', description: 'Single-outcome spread model' },
+  { id: 'bonding', name: 'Bonding', description: 'Quoted-price threshold model' },
+  { id: 'momentum', name: 'Momentum', description: 'No entry model implemented' },
+  { id: 'value', name: 'Value', description: 'Fixed-reference threshold model' },
 ]
 
 export default function BacktestPage() {
@@ -175,21 +175,21 @@ export default function BacktestPage() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="stat-card">
                   <div className="text-sm text-gray-400">Final Value</div>
-                  <div className="text-2xl font-bold">${result.finalCapital.toFixed(2)}</div>
+                  <div className="text-2xl font-bold">${result.final_capital.toFixed(2)}</div>
                 </div>
                 <div className="stat-card">
                   <div className="text-sm text-gray-400">Total Return</div>
-                  <div className={`text-2xl font-bold ${result.totalReturn >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    {(result.totalReturn * 100).toFixed(1)}%
+                  <div className={`text-2xl font-bold ${result.total_return >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {(result.total_return * 100).toFixed(1)}%
                   </div>
                 </div>
                 <div className="stat-card">
                   <div className="text-sm text-gray-400">Win Rate</div>
-                  <div className="text-2xl font-bold">{(result.winRate * 100).toFixed(0)}%</div>
+                  <div className="text-2xl font-bold">{(result.win_rate * 100).toFixed(0)}%</div>
                 </div>
                 <div className="stat-card">
                   <div className="text-sm text-gray-400">Sharpe Ratio</div>
-                  <div className="text-2xl font-bold">{result.sharpeRatio.toFixed(2)}</div>
+                  <div className="text-2xl font-bold">{result.sharpe_ratio.toFixed(2)}</div>
                 </div>
               </div>
 
@@ -197,7 +197,7 @@ export default function BacktestPage() {
                 <h4 className="text-lg font-semibold mb-4">Equity Curve</h4>
                 <div className="h-72">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={result.equityCurve}>
+                    <AreaChart data={result.equity_curve}>
                       <defs>
                         <linearGradient id="colorEquity" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%" stopColor="#00D395" stopOpacity={0.3}/>
@@ -222,9 +222,9 @@ export default function BacktestPage() {
                     <BarChart2 className="w-4 h-4" />
                     <span>Total Trades</span>
                   </div>
-                  <div className="text-xl font-bold">{result.totalTrades}</div>
+                  <div className="text-xl font-bold">{result.total_trades}</div>
                   <div className="text-sm text-gray-500">
-                    {result.winningTrades}W / {result.losingTrades}L
+                    {result.winning_trades}W / {result.losing_trades}L
                   </div>
                 </div>
                 <div className="card">
@@ -233,7 +233,7 @@ export default function BacktestPage() {
                     <span>Max Drawdown</span>
                   </div>
                   <div className="text-xl font-bold text-red-400">
-                    {(result.maxDrawdown * 100).toFixed(1)}%
+                    {(result.max_drawdown * 100).toFixed(1)}%
                   </div>
                 </div>
                 <div className="card">
@@ -241,19 +241,19 @@ export default function BacktestPage() {
                     <Target className="w-4 h-4" />
                     <span>Profit Factor</span>
                   </div>
-                  <div className="text-xl font-bold">{result.profitFactor.toFixed(2)}</div>
+                  <div className="text-xl font-bold">{result.profit_factor?.toFixed(2) ?? 'N/A'}</div>
                 </div>
                 <div className="card">
                   <div className="text-gray-400 text-sm">Avg Winner</div>
-                  <div className="text-lg font-bold text-green-400">${result.avgWinner.toFixed(2)}</div>
+                  <div className="text-lg font-bold text-green-400">${result.avg_winner.toFixed(2)}</div>
                 </div>
                 <div className="card">
                   <div className="text-gray-400 text-sm">Avg Loser</div>
-                  <div className="text-lg font-bold text-red-400">${Math.abs(result.avgLoser).toFixed(2)}</div>
+                  <div className="text-lg font-bold text-red-400">${Math.abs(result.avg_loser).toFixed(2)}</div>
                 </div>
                 <div className="card">
                   <div className="text-gray-400 text-sm">Sortino Ratio</div>
-                  <div className="text-lg font-bold">{result.sortinoRatio.toFixed(2)}</div>
+                  <div className="text-lg font-bold">{result.sortino_ratio?.toFixed(2) ?? 'N/A'}</div>
                 </div>
               </div>
             </div>

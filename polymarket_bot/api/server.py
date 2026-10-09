@@ -1,5 +1,6 @@
 import asyncio
 import json
+from dataclasses import replace
 from datetime import UTC, datetime
 
 from aiohttp import web
@@ -11,7 +12,7 @@ from ..utils.logging import get_logger
 log = get_logger(__name__)
 
 class APIServer:
-    def __init__(self, bot=None, host: str = "0.0.0.0", port: int = 8080):
+    def __init__(self, bot=None, host: str = "127.0.0.1", port: int = 8080):
         self.bot = bot
         self.host = host
         self.port = port
@@ -188,11 +189,14 @@ class APIServer:
         try:
             data = await request.json()
 
-            if "trading" in data:
-                for key, value in data["trading"].items():
-                    snake_key = self._camel_to_snake(key)
-                    if hasattr(config.trading, snake_key):
-                        setattr(config.trading, snake_key, value)
+            if not isinstance(data, dict) or set(data) != {"trading"}:
+                raise ValueError("Expected a trading settings object")
+            if not isinstance(data["trading"], dict):
+                raise ValueError("Trading settings must be an object")
+            updates = {self._camel_to_snake(key): value for key, value in data["trading"].items()}
+            if not set(updates) <= config.trading.__dataclass_fields__.keys():
+                raise ValueError("Unknown trading setting")
+            config.trading = replace(config.trading, **updates)
 
             return web.json_response({"status": "updated"})
         except Exception as e:

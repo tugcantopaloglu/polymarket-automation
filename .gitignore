@@ -64,4 +64,4 @@ alertmanager-data/
 reports/
 
 # Data directories
-data/
+/data/

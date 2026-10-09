@@ -1,3 +1,4 @@
+import math
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -19,6 +20,25 @@ class TradingConfig:
     kelly_fraction: float = 0.25
     stop_loss_pct: float = 0.15
     take_profit_pct: float = 0.30
+
+    def __post_init__(self):
+        for name in self.__dataclass_fields__:
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+                raise ValueError(f"{name} must be a finite number")
+            if value < 0:
+                raise ValueError(f"{name} must be nonnegative")
+        for name in ("max_position_usd", "max_daily_loss_usd"):
+            if getattr(self, name) <= 0:
+                raise ValueError(f"{name} must be positive")
+        for name in (
+            "min_profit_margin", "max_slippage", "max_portfolio_exposure",
+            "kelly_fraction", "stop_loss_pct",
+        ):
+            if getattr(self, name) > 1:
+                raise ValueError(f"{name} must not exceed one")
+        if not isinstance(self.cooldown_seconds, int):
+            raise ValueError("cooldown_seconds must be an integer")
 
 @dataclass
 class AlertConfig:
@@ -57,6 +77,7 @@ class Config:
     def __post_init__(self):
         self.data_dir.mkdir(exist_ok=True)
         self._load_env()
+        self.trading.__post_init__()
 
     def _load_env(self):
         self.alerts.telegram_bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")

@@ -22,24 +22,23 @@ class RateLimiter:
 
     async def acquire(self):
         async with self._lock:
-            now = time.monotonic()
-            window_start = now - 1.0
-
-            while self._timestamps and self._timestamps[0] < window_start:
-                self._timestamps.popleft()
-
-            if len(self._timestamps) >= self.requests_per_second:
+            while True:
+                now = time.monotonic()
+                window_start = now - 1.0
+                while self._timestamps and self._timestamps[0] <= window_start:
+                    self._timestamps.popleft()
+                if len(self._timestamps) < self.requests_per_second:
+                    self._timestamps.append(now)
+                    return
                 sleep_time = self._timestamps[0] - window_start
                 if sleep_time > 0:
                     log.debug("rate_limit_wait", sleep=f"{sleep_time:.3f}s")
                     await asyncio.sleep(sleep_time)
 
-            self._timestamps.append(now)
-
     def remaining(self) -> int:
         now = time.monotonic()
         window_start = now - 1.0
-        while self._timestamps and self._timestamps[0] < window_start:
+        while self._timestamps and self._timestamps[0] <= window_start:
             self._timestamps.popleft()
         return max(0, int(self.requests_per_second) - len(self._timestamps))
 

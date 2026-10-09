@@ -1,276 +1,105 @@
-# Polymarket Trading Bot v2.0
+# Polymarket Automation
 
 [![CI](https://github.com/tugcantopaloglu/polymarket-automation/actions/workflows/ci.yml/badge.svg)](https://github.com/tugcantopaloglu/polymarket-automation/actions/workflows/ci.yml)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Professional prediction market trading tool for [Polymarket](https://polymarket.com) with multiple strategies, advanced analysis, AI-powered insights, and comprehensive risk management.
+An experimental Python project for scanning prediction markets, evaluating strategy signals, storing local observations, and running simplified backtests. It also contains a Next.js dashboard, optional AI analyzers, notification adapters, and deployment templates. This is research software with incomplete integrations.
 
-## ✨ Features
+## Implementation status
 
-### Trading Strategies
+| Area | Current behavior |
+| --- | --- |
+| Market scanning | Async HTTP client, order book parsing, local SQLite snapshots, and six strategy classes |
+| Monitor mode | Reads market data without loading a saved wallet key |
+| Dry run | Scans and logs opportunities; skips execution, reports zero wallet balance, and does not simulate fills or maintain a paper cash balance |
+| Ordinary strategy execution | Updates local portfolio/trade records; it does not submit or reconcile exchange orders |
+| Arbitrage execution | The separate `execute_arbitrage` helper can submit two sequential orders; the main bot does not call it. Generic execution rejects `BOTH` rather than recording it as a NO position |
+| Backtesting | Reads saved SQLite market snapshots. Uses simplified rules separate from the scanner strategies, with market-specific prices and daily equity |
+| Whale following | Uses placeholder wallet profiles and randomly generated activity, not an on-chain feed |
+| API and dashboard | API class and frontend exist, but bot startup does not launch the API. Several dashboard endpoints call database methods that are not implemented |
+| Notifications | Telegram and Discord adapters can send external messages when configured, including during dry run |
+| AI | Optional adapters exist; the main bot does not automatically invoke them |
 
-| Strategy | Description | Risk Level |
-|----------|-------------|------------|
-| **Arbitrage** | Exploits price discrepancies when Yes + No < 1.0 | Low |
-| **Bonding** | Buys high-probability outcomes (>92%) near resolution | Low-Medium |
-| **Momentum** | Follows price trends with volume confirmation | Medium |
-| **Mean Reversion** | Bets on price returning to fair value | Medium |
-| **Value** | Uses Kelly criterion to find mispriced markets | Medium-High |
-| **Whale Following** | Copies trades from profitable wallets | Medium |
+There is no Redis integration or exchange WebSocket connection in the Python runtime. `stream_prices` polls HTTP. Exchange calls, authenticated balances, real fills, settlement, and production deployment are not established by the offline test suite.
 
-### 🌐 Web Dashboard
+## Install and test
 
-Modern Next.js dashboard with real-time updates:
-- Portfolio overview with key metrics
-- Strategy performance visualization
-- Trade history and P&L tracking
-- Alert configuration
-- Backtesting interface
-
-### 🤖 AI Integration
-
-- GPT-4/Claude analysis for market insights
-- Prediction explanations
-- Risk assessment
-- Multi-model support (OpenAI, Anthropic)
-
-### 📊 Analysis Tools
-
-- **Market Metrics**: Momentum, volatility, RSI, Bollinger Bands
-- **Risk Assessment**: Kelly criterion, VaR, CVaR, expected value
-- **Arbitrage Detection**: Slippage modeling, execution risk scoring
-- **Backtesting**: Historical strategy testing with mock data
-
-### 🔔 Notifications
-
-- **Telegram**: Real-time alerts for opportunities and trades
-- **Discord**: Webhook support with rich embeds
-- **Alert Types**: Price changes, volume spikes, arbitrage, whale activity
-
-### 📈 Portfolio Management
-
-- Position tracking with unrealized P&L
-- Stop-loss and take-profit automation
-- Daily loss limits and exposure caps
-- Sharpe ratio and drawdown monitoring
-
-### ⚡ Technical Features
-
-- **Rate Limiting**: Token bucket with configurable limits
-- **Circuit Breaker**: Auto-disable on API failures
-- **Retry Logic**: Exponential backoff for transient errors
-- **Async Architecture**: High-throughput market scanning
-- **Redis Caching**: Fast data access
-- **WebSocket Streaming**: Real-time price updates
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Python 3.11+
-- Node.js 20+ (for dashboard)
-- Docker & Docker Compose (recommended)
-
-### Option 1: Docker (Recommended)
+Python 3.11 or newer is required. From a new checkout:
 
 ```bash
-# Clone the repository
-git clone https://github.com/tugcantopaloglu/polymarket-bot.git
-cd polymarket-bot
-
-# Copy environment template
-cp .env.example .env
-# Edit .env with your settings
-
-# Start the bot
-docker compose up -d polymarket-bot
-
-# Start with monitoring stack
-docker compose --profile monitoring up -d
-
-# View logs
-docker logs -f polymarket-bot
-```
-
-### Option 2: Local Installation
-
-```bash
-# Clone and setup
-git clone https://github.com/tugcantopaloglu/polymarket-bot.git
-cd polymarket-bot
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate
-
-# Install dependencies
-pip install -e ".[all]"
-
-# Setup wallet (first time)
-python -m polymarket_bot.bot --key YOUR_PRIVATE_KEY
-
-# Run in dry-run mode
-python -m polymarket_bot.bot --dry-run --strategies arbitrage bonding
-```
-
-### Option 3: Frontend Dashboard
-
-```bash
-cd frontend
-npm install
-npm run dev
-# Open http://localhost:3000
-```
-
-## ⚙️ Configuration
-
-Create `.env` file:
-
-```env
-# Wallet (or use --key flag)
-# PRIVATE_KEY=your_private_key
-
-# Notifications (optional)
-TELEGRAM_BOT_TOKEN=your_bot_token
-TELEGRAM_CHAT_ID=your_chat_id
-DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
-
-# AI Analysis (optional)
-OPENAI_API_KEY=sk-...
-ANTHROPIC_API_KEY=sk-ant-...
-
-# Trading parameters
-MIN_PROFIT_MARGIN=0.02
-MAX_POSITION_USD=50
-MAX_DAILY_LOSS_USD=20
-```
-
-## 📖 Usage
-
-### Basic Commands
-
-```bash
-# Monitor mode (no trading)
-python -m polymarket_bot.bot --monitor
-
-# Dry run (simulated trading)
-python -m polymarket_bot.bot --dry-run --strategies arbitrage bonding
-
-# Live trading
-python -m polymarket_bot.bot --strategies arbitrage bonding momentum
-
-# All options
+git clone https://github.com/tugcantopaloglu/polymarket-automation.git
+cd polymarket-automation
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -e ".[dev]"
+python -m pytest -q
+python -m ruff check polymarket_bot tests
 python -m polymarket_bot.bot --help
 ```
 
-### Docker Compose Profiles
+On Windows, activate with `.venv\Scripts\Activate.ps1`. Install `.[ai]` separately only when using the optional AI adapters. Tests use synthetic fixtures, temporary SQLite databases, mocked SDK boundaries, and local HTTP servers; they do not require wallet credentials or paid model calls.
+
+## Read-only scanning
+
+These commands contact public market APIs. Leave notification credentials empty to avoid external messages:
 
 ```bash
-# Live trading (default)
-docker compose up -d polymarket-bot
-
-# Dry run mode
-docker compose --profile dry-run up -d
-
-# Monitor only
-docker compose --profile monitor up -d
-
-# Full monitoring stack (Prometheus + Grafana)
-docker compose --profile monitoring up -d
+python -m polymarket_bot.bot --monitor
+python -m polymarket_bot.bot --dry-run --strategies arbitrage bonding
 ```
 
-## 🧪 Testing
+Both modes create clients with `read_only=True`. They do not load the keystore, derive exchange API credentials, or allow the client's order/cancel methods. Dry-run sizing dependent on wallet capital sees zero balance; this is not a full paper-trading simulator. Imports initialize the default local SQLite database and create the `data` directory.
+
+The CLI also accepts `--strategies`, `--funder`, `--key`, and `--log-level`. `--key` persists a signing key and should not be passed in shell history or process arguments. The encrypted keystore and its encryption key are stored together; this is not a password-protected vault. There is no need to configure a wallet for read-only work.
+
+## Configuration
+
+`Config` loads `.env` through `python-dotenv`. Only these environment settings are read by its loader:
+
+| Variable | Purpose |
+| --- | --- |
+| `MIN_PROFIT_MARGIN` | Trading configuration margin, default 0.02 |
+| `MAX_POSITION_USD` | Local position limit, default 50 |
+| `MAX_DAILY_LOSS_USD` | Local loss limit, default 20 |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Optional outgoing Telegram messages |
+| `DISCORD_WEBHOOK_URL` | Optional outgoing Discord messages |
+
+Strategy constructors also have their own parameters; changing the global margin does not automatically change every strategy's threshold. Other trading fields can be supplied through `TradingConfig` or validated API updates. `PRIVATE_KEY`, `FUNDER_ADDRESS`, `MIN_LIQUIDITY_USD`, and `MAX_SLIPPAGE` in the existing environment template are not loaded by `Config`.
+
+The default SQLite path is `polymarket_data.db` in the working directory, not `data/polymarket_data.db`. Account for that path when planning persistence; the current Compose `./data` mount alone does not retain this database.
+
+## Saved-data backtests
+
+`BacktestEngine.run` reads `market_snapshots` from SQLite. It does not download historical data or generate it automatically. `tests/fixtures/backtest_snapshots.json` is a small synthetic two-market regression fixture, not measured market performance.
+
+Inputs require finite positive starting capital, a known strategy (`arbitrage`, `bonding`, `momentum`, or `value`), and an ordered date range of at most 3660 days. Naive dates are interpreted as UTC; the range includes both endpoints. Positions use share quantities, are valued at their latest market-specific snapshot, and close at that market's last observed price. An existing market/outcome position is not overwritten by repeated entry signals. Returns use changes in daily equity. Undefined profit factor or Sortino ratio is JSON `null`.
+
+Backtests omit execution fees, spread, order book depth, settlement delays, and real fill constraints. The arbitrage backtest enters one outcome; it does not reproduce a two-leg arbitrage transaction. Momentum backtesting has no entry implementation. These results are not a validation of the scanning strategies or financial advice.
+
+## Frontend and deployment templates
+
+The frontend requires Node.js 20 or newer:
 
 ```bash
-# Run all tests
-pytest tests/ -v
-
-# With coverage
-pytest --cov=polymarket_bot --cov-report=html
-
-# Specific tests
-pytest tests/test_strategies.py -v
-pytest tests/test_backtesting.py -v
-pytest tests/test_ai_analyzer.py -v
+cd frontend
+npm ci
+npm run build
+npm run dev
 ```
 
-## 📚 Documentation
+Its API rewrites target `http://localhost:8080`. The Compose `NEXT_PUBLIC_API_URL` variable is not used by that rewrite, and localhost inside the frontend container is not the bot container. The backtest page reads the engine's snake_case result fields and displays undefined ratios as `N/A`.
 
-- [Strategy Guide](docs/STRATEGIES.md) - Detailed strategy documentation
-- [API Reference](docs/API.md) - REST API documentation
-- [Risk Warnings](docs/RISK.md) - Important risk information
+Docker/Compose, systemd, Prometheus, Grafana, and Alertmanager files are templates, not a complete working deployment. Bot startup does not start `APIServer`, so the configured HTTP health checks fail. Redis is listed in Compose but unused by the bot. The nginx profile references files that are not included. Do not interpret container startup or a green offline test run as deployment acceptance.
 
-## 🏗️ Architecture
+The frontend lockfile includes compatible updates to Next.js 14.2.35 and PostCSS 8.5.29, with the PostCSS override replacing Next's older bundled dependency. The 2026-10-09 local `npm audit` still reports eight vulnerable packages (one critical, five high, two moderate) in the Next.js and Tailwind dependency chains. A compatible `npm audit fix` leaves those findings; its framework remediation proposes major Next.js and Tailwind upgrades. Keep this frontend private until those migrations and their acceptance checks are completed. A successful build does not clear these security findings.
 
-```
-polymarket-bot/
-├── polymarket_bot/
-│   ├── __init__.py
-│   ├── bot.py              # Main orchestrator
-│   ├── client.py           # Polymarket API client
-│   ├── config.py           # Configuration management
-│   ├── portfolio.py        # Position management
-│   ├── ai/
-│   │   └── analyzer.py     # GPT-4/Claude integration
-│   ├── api/
-│   │   └── server.py       # REST API server
-│   ├── analysis/
-│   │   └── market_analyzer.py
-│   ├── backtesting/
-│   │   ├── engine.py       # Backtest framework
-│   │   └── mock_data.py    # Data generation
-│   ├── data/
-│   │   └── database.py     # SQLite persistence
-│   ├── notifications/
-│   │   └── alerts.py       # Telegram/Discord
-│   ├── strategies/
-│   │   ├── base.py         # Strategy interface
-│   │   ├── arbitrage.py
-│   │   ├── bonding.py
-│   │   ├── momentum.py
-│   │   ├── value.py
-│   │   └── whale.py
-│   └── utils/
-│       ├── rate_limiter.py
-│       └── logging.py
-├── frontend/               # Next.js dashboard
-├── monitoring/             # Prometheus/Grafana configs
-├── docs/                   # Documentation
-├── tests/                  # Test suite
-└── scripts/                # Utility scripts
-```
+## Execution and state limitations
 
-## ⚠️ Risk Warnings
+Before any live integration, exchange fills, cash/share units, portfolio synchronization, persisted daily limits, and order reconciliation need a separate implementation and acceptance review. The current local portfolio paths have inconsistent sizing/accounting and are not authoritative exchange state. They do not enforce durable order idempotency across retries or restarts. The two-leg arbitrage helper has no atomic execution or recovery if the first leg fills and the second fails; never blindly retry an uncertain submission.
 
-**Trading prediction markets involves significant risk:**
+The API has no authentication or server-side rate limiting. It defaults to loopback, but a frontend proxy or explicit external bind can expose it. Keep it private and use authentication before exposing its settings mutation endpoint. See [API notes](docs/API.md), [strategy implementation notes](docs/STRATEGIES.md), and [risk notes](docs/RISK.md).
 
-- Markets can move against you rapidly
-- Liquidity may be insufficient for large orders
-- Smart contract risks exist
-- Past performance doesn't guarantee future results
-- **Only trade with funds you can afford to lose**
+`legacy/` contains older scripts with separate behavior. The test and installation commands above target `polymarket_bot`; legacy scripts are not maintained as the v2 entry point.
 
-See [RISK.md](docs/RISK.md) for detailed risk information.
+## License
 
-## 🤝 Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests (`pytest tests/ -v`)
-5. Submit a pull request
-
-## 📄 License
-
-MIT License - See [LICENSE](LICENSE) file
-
-## 🙏 Disclaimer
-
-This software is provided as-is for educational purposes. The authors are not responsible for any financial losses incurred from using this software. Always do your own research and trade responsibly.
-
----
-
-Built with ❤️ for the prediction market community
+MIT. See [LICENSE](LICENSE).

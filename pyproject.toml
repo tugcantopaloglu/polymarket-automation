@@ -56,10 +56,10 @@ all = [
 polymarket-bot = "polymarket_bot.bot:main"
 
 [project.urls]
-Homepage = "https://github.com/tugcantopaloglu/polymarket-bot"
-Documentation = "https://github.com/tugcantopaloglu/polymarket-bot#readme"
-Repository = "https://github.com/tugcantopaloglu/polymarket-bot"
-Issues = "https://github.com/tugcantopaloglu/polymarket-bot/issues"
+Homepage = "https://github.com/tugcantopaloglu/polymarket-automation"
+Documentation = "https://github.com/tugcantopaloglu/polymarket-automation#readme"
+Repository = "https://github.com/tugcantopaloglu/polymarket-automation"
+Issues = "https://github.com/tugcantopaloglu/polymarket-automation/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["polymarket_bot"]
